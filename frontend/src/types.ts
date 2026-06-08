@@ -85,6 +85,23 @@ export interface Tolerancia {
   fin_tolerancia: string;
 }
 
+export interface PedidoCargado {
+  codigo: string | null;
+  descripcion: string | null;
+  detalle_horario: string;
+  horas_diarias_decl: number | null;
+  horas_sem_decl: number | null;
+  feriados: string | null;
+  agrupador: number | null;
+  hoja: string;
+}
+
+export interface CargarPedidoResponse {
+  ok: boolean;
+  n_pedidos: number;
+  pedidos: PedidoCargado[];
+}
+
 export interface ResultadoAnalisis {
   pedido: {
     codigo: string;

@@ -1,0 +1,227 @@
+"""
+generador_grillas.py - Generador de Turnos Universal (Fase 1)
+
+Módulo NUEVO, al lado del motor. No modifica turnos_engine.py.
+Reusa el parser y los buscadores del motor para validar.
+
+Modelo unificado: un turno = grilla de N semanas x 7 días.
+Cada celda = un horario (rango) o None (=franco/LIBR).
+
+Empezamos por el caso más simple: FRANCO CORRIDO (1 semana, 1 horario).
+"""
+from dataclasses import dataclass, field
+from typing import Optional
+
+from turnos_engine import (
+    parse_horario, _DIA_NOMBRE, _DIAS, _norm,
+)
+
+DIAS_ORDEN = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo']
+
+
+# ---------------------------------------------------------------------------
+# Estructura de grilla universal
+# ---------------------------------------------------------------------------
+@dataclass
+class Celda:
+    """Una celda de la grilla: un día de una semana.
+
+    Estados posibles (según reglas reales del negocio):
+    - horario normal: horario != None, es_franco=False
+    - franco: es_franco=True (SOLO si la columna FRANCO lo indica)
+    - a órdenes: a_ordenes=True (es una aclaración; PUEDE tener horario o no)
+    - sin definir: todo vacío -> el sistema lo marca para completar a mano
+    """
+    horario: Optional[str] = None   # "06:30-15:30" canónico
+    es_franco: bool = False
+    a_ordenes: bool = False
+
+    @property
+    def sin_definir(self) -> bool:
+        return self.horario is None and not self.es_franco and not self.a_ordenes
+
+    def __repr__(self):
+        if self.es_franco:
+            return 'LIBR'
+        if self.a_ordenes and self.horario:
+            return f'{self.horario}(AO)'
+        if self.a_ordenes:
+            return 'A-ORD'
+        if self.horario:
+            return self.horario
+        return '???'
+
+
+@dataclass
+class Grilla:
+    """Grilla universal: semanas x 7 días."""
+    semanas: list = field(default_factory=list)   # lista de listas de 7 Celdas
+    notas: list = field(default_factory=list)
+
+    @property
+    def n_semanas(self):
+        return len(self.semanas)
+
+    def resumen(self):
+        out = []
+        for i, sem in enumerate(self.semanas, 1):
+            celdas = ' | '.join(f'{DIAS_ORDEN[d][:2]}:{c}' for d, c in enumerate(sem))
+            out.append(f'  Semana {i}: {celdas}')
+        return '\n'.join(out)
+
+
+# ---------------------------------------------------------------------------
+# Generador de franco corrido (1 semana, 1 horario, franco en N días)
+# ---------------------------------------------------------------------------
+def _dia_a_idx(nombre: str) -> Optional[int]:
+    return _DIAS.get(_norm(nombre))
+
+
+def generar_franco_corrido(detalle_horario: str, dias_franco: list) -> Grilla:
+    """
+    Caso simple: un horario fijo, trabaja todos los días salvo los de franco.
+    detalle_horario: texto tipo "Domingo a Viernes 00:00 a 08:00" (el rango se parsea)
+    dias_franco: lista de nombres de día de franco, ej. ['Sabado']
+
+    Construye 1 semana: horario en los días que trabaja, franco en los demás.
+    """
+    p = parse_horario(detalle_horario)
+    g = Grilla()
+    if not p.ok or not p.hora_inicio:
+        g.notas.append(f'No se pudo parsear el horario de: "{detalle_horario}" -> REVISAR MANUAL')
+        return g
+
+    horario_canon = f'{p.hora_inicio}-{p.hora_fin}'
+    francos_idx = set()
+    for d in dias_franco:
+        idx = _dia_a_idx(d)
+        if idx is not None:
+            francos_idx.add(idx)
+        else:
+            g.notas.append(f'Dia de franco no reconocido: "{d}"')
+
+    semana = []
+    for d in range(7):
+        if d in francos_idx:
+            semana.append(Celda(es_franco=True))
+        else:
+            semana.append(Celda(horario=horario_canon))
+    g.semanas.append(semana)
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Parser multi-horario por segmentos (caso LD516 Córdoba)
+# Texto: "LUNES Y JUEVES 6:30 A 15:30, MARTES Y VIERNES 8:30 A 17:30, ..."
+# Cada segmento (separado por coma o barra) = grupo de días + un horario.
+# ---------------------------------------------------------------------------
+import re
+
+_RE_RANGO_SEG = re.compile(r'(\d{1,2})[:.]?(\d{2})?\s*a\s*(\d{1,2})[:.]?(\d{2})?', re.I)
+
+
+def _parsear_dias_segmento(texto_dias: str) -> list:
+    """De un texto de días saca los índices. Maneja:
+    - lista con Y/coma: "LUNES Y JUEVES" -> [0,3]
+    - rango con 'a': "LUNES A VIERNES" -> [0,1,2,3,4]
+    - día suelto: "MIERCOLES" -> [2]
+    """
+    t = _norm(texto_dias)
+    # ¿rango? "X a Y" donde X e Y son días
+    m = re.search(r'\b([a-z]+)\s+a\s+([a-z]+)\b', t)
+    if m and _dia_a_idx(m.group(1)) is not None and _dia_a_idx(m.group(2)) is not None:
+        d1, d2 = _dia_a_idx(m.group(1)), _dia_a_idx(m.group(2))
+        if d1 <= d2:
+            return list(range(d1, d2 + 1))
+        return list(range(d1, 7)) + list(range(0, d2 + 1))
+    # lista: separar por 'y' / 'e' / espacios y juntar días reconocidos
+    tokens = re.split(r'\s+y\s+|\s+e\s+|,|\s+', t)
+    dias = [_dia_a_idx(tk) for tk in tokens if _dia_a_idx(tk) is not None]
+    return sorted(set(dias))
+
+
+def _parsear_horario_segmento(texto: str) -> Optional[str]:
+    """Extrae el rango horario de un segmento -> 'HH:MM-HH:MM' canónico."""
+    m = _RE_RANGO_SEG.search(texto)
+    if not m:
+        return None
+    h1 = int(m.group(1)); m1 = int(m.group(2) or 0)
+    h2 = int(m.group(3)); m2 = int(m.group(4) or 0)
+    return f'{h1:02d}:{m1:02d}-{h2:02d}:{m2:02d}'
+
+
+def generar_multihorario(detalle_horario: str, dias_franco: list) -> Grilla:
+    """
+    Caso multi-horario: cada día puede tener un horario distinto.
+    Parsea segmentos separados por coma o barra.
+    Los días de franco vienen de la columna FRANCO (no se infieren del texto).
+    Días no mencionados y sin franco -> sin_definir (se marcan para revisar).
+    """
+    g = Grilla()
+    semana = [Celda() for _ in range(7)]   # arranca todo sin definir
+
+    # marcar francos (de la columna FRANCO)
+    francos_idx = set()
+    for d in dias_franco:
+        idx = _dia_a_idx(d)
+        if idx is not None:
+            francos_idx.add(idx)
+            semana[idx].es_franco = True
+
+    # partir en segmentos por coma o barra
+    segmentos = re.split(r'[,/]', detalle_horario)
+    for seg in segmentos:
+        seg = seg.strip()
+        if not seg:
+            continue
+        a_ord = 'orden' in _norm(seg) or 'disp' in _norm(seg)
+        dias = _parsear_dias_segmento(seg)
+        horario = _parsear_horario_segmento(seg)
+        if not dias:
+            g.notas.append(f'Segmento sin días reconocibles: "{seg}" -> REVISAR MANUAL')
+            continue
+        for d in dias:
+            if semana[d].es_franco:
+                g.notas.append(f'{DIAS_ORDEN[d]}: el texto le asigna horario pero está marcado franco -> REVISAR')
+                continue
+            semana[d].horario = horario
+            semana[d].a_ordenes = a_ord
+            if horario is None and not a_ord:
+                g.notas.append(f'{DIAS_ORDEN[d]}: segmento sin horario claro -> REVISAR')
+
+    # avisar días sin definir
+    for d in range(7):
+        if semana[d].sin_definir:
+            g.notas.append(f'{DIAS_ORDEN[d]}: sin horario ni franco -> REVISAR MANUAL (¿falta dato?)')
+
+    g.semanas.append(semana)
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Prueba contra el caso real LD573
+# ---------------------------------------------------------------------------
+if __name__ == '__main__':
+    print('=' * 75)
+    print('CASO LD573: "Domingo a Viernes 00:00 a 08:00", franco SABADO')
+    print('Esperado (del desglose real): trabaja todos menos Sabado')
+    print('=' * 75)
+    g = generar_franco_corrido('Domingo a Viernes 00:00 a 08:00', ['SABADO'])
+    print(g.resumen())
+    if g.notas:
+        for n in g.notas:
+            print('  !', n)
+
+    print()
+    print('=' * 75)
+    print('CASO LD574: "Lunes a Sabados 00:00 a 08:00", franco DOMINGO')
+    print('=' * 75)
+    g2 = generar_franco_corrido('Lunes a Sabados 00:00 a 08:00', ['DOMINGO'])
+    print(g2.resumen())
+
+    print()
+    print('=' * 75)
+    print('CASO LD580: "Domingo a Viernes 16:00 a 00:00", franco SABADO (cruza medianoche)')
+    print('=' * 75)
+    g3 = generar_franco_corrido('Domingo a Viernes 16:00 a 00:00', ['SABADO'])
+    print(g3.resumen())

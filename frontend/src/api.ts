@@ -1,4 +1,4 @@
-import type { PedidoIn, TablasStatus, ResultadoAnalisis } from './types';
+import type { CargarPedidoResponse, PedidoIn, TablasStatus, ResultadoAnalisis } from './types';
 
 const BASE = 'http://localhost:8000/api';
 
@@ -30,6 +30,29 @@ export async function analizar(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Error al analizar');
+  }
+  return res.json();
+}
+
+export async function listarSolapas(archivo: File): Promise<{ ok: boolean; solapas: string[] }> {
+  const fd = new FormData();
+  fd.append('archivo', archivo);
+  const res = await fetch(`${BASE}/listar-solapas`, { method: 'POST', body: fd });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Error al leer el archivo');
+  }
+  return res.json();
+}
+
+export async function cargarPedido(archivo: File, solapa?: string): Promise<CargarPedidoResponse> {
+  const fd = new FormData();
+  fd.append('archivo', archivo);
+  if (solapa) fd.append('solapa', solapa);
+  const res = await fetch(`${BASE}/cargar-pedido`, { method: 'POST', body: fd });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Error al cargar el pedido');
   }
   return res.json();
 }

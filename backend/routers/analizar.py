@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..models.schemas import AnalisisRequest
@@ -58,40 +58,36 @@ async def analizar(req: AnalisisRequest):
             status_code=400,
             detail="Primero cargá los 3 Excels de SAP en la pantalla de Carga de Tablas.",
         )
-    resultados = []
-    for p in req.pedidos:
-        try:
-            r = _motor.analizar_pedido(
-                p.codigo,
-                p.descripcion,
-                p.detalle_horario,
-                p.agrupador,
-                p.horas_diarias_decl,
-                p.horas_sem_decl,
-                p.es_flex,
-            )
-            resultados.append(_sanitize(r))
-        except Exception as exc:
-            resultados.append({"error": str(exc), "pedido": {"codigo": p.codigo}})
-    return JSONResponse(content={"resultados": resultados})
+    pedidos_dicts = [
+        {
+            'codigo': p.codigo,
+            'descripcion': p.descripcion,
+            'detalle_horario': p.detalle_horario,
+            'agrupador': p.agrupador,
+            'horas_diarias_decl': p.horas_diarias_decl,
+            'horas_sem_decl': p.horas_sem_decl,
+            'es_flex': p.es_flex,
+        }
+        for p in req.pedidos
+    ]
+    resultados = _motor.analizar_lote(pedidos_dicts)
+    return JSONResponse(content={"resultados": [_sanitize(r) for r in resultados]})
 
 
 # prefijo de código de turno -> agrupador (línea). Sacado de los datos reales.
 PREFIJO_AGRUPADOR = {
-    "LS": 20,   "LSFL": 20,    # Sarmiento (normal + flex)
+    "LS": 20,   "LSFL": 20,    # Sarmiento
     "LSM": 22,  "LSMF": 22,    # San Martín
     "LR": 24,   "LRFL": 24,    # Roca
     "REG": 26,  "REGF": 26,    # Regionales
+    "LD": 26,                  # Regionales (LD también existe en Mitre LD/30, pero por uso se asigna a 26)
     "LM": 28,   "LMFL": 28,    # Mitre
     "LBS": 34,  "LBSF": 34,    # Belgrano Sur
-    # NO incluidos a propósito por colisión (mismo prefijo en 2 líneas):
-    #   "LD" -> Regionales (26) Y Mitre LD (30)
-    #   "SC" -> Central (32) Y Mitre (28)
-    # Para esos, el sistema deja agrupador=None y lo pide a mano.
+    # "SC" queda ambiguo: Central (32) y Mitre (28)
 }
 
 # prefijos ambiguos: existen en más de una línea, no se puede deducir solo
-PREFIJOS_AMBIGUOS = {"LD", "SC"}
+PREFIJOS_AMBIGUOS = {"SC"}
 
 
 def _deducir_agrupador(codigo):
@@ -124,14 +120,30 @@ def _buscar_col(columnas, *claves):
     return None
 
 
+@router.post("/listar-solapas")
+async def listar_solapas(archivo: UploadFile = File(...)):
+    try:
+        buf = io.BytesIO(await archivo.read())
+        solapas = pd.ExcelFile(buf).sheet_names
+        return {"ok": True, "solapas": solapas}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Error al leer el archivo: {exc}")
+
+
 @router.post("/cargar-pedido")
-async def cargar_pedido(archivo: UploadFile = File(...)):
+async def cargar_pedido(
+    archivo: UploadFile = File(...),
+    solapa: Optional[str] = Form(None),
+):
     try:
         buf = io.BytesIO(await archivo.read())
         xl = pd.ExcelFile(buf)
+        hojas = [solapa] if solapa else xl.sheet_names
         pedidos = []
 
-        for hoja in xl.sheet_names:
+        for hoja in hojas:
+            if hoja not in xl.sheet_names:
+                raise HTTPException(status_code=400, detail=f"Solapa '{hoja}' no existe en el archivo.")
             df = pd.read_excel(xl, sheet_name=hoja)
             if df.empty:
                 continue

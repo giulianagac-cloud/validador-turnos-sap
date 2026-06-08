@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { analizar } from '../api';
-import type { PedidoIn, TablasState, ResultadoAnalisis } from '../types';
+import { useRef, useState } from 'react';
+import { analizar, cargarPedido, listarSolapas } from '../api';
+import type { PedidoCargado, PedidoIn, TablasState, ResultadoAnalisis } from '../types';
 import { formatElapsed } from '../utils';
 
 const AGRUPADORES = [
@@ -14,12 +14,20 @@ const AGRUPADORES = [
   { value: 34, label: '34 — Belgrano Sur' },
 ];
 
+const FLEX_PREFIXES = new Set(['LSFL', 'LSMF', 'LRFL', 'REGF', 'LMFL', 'LBSF']);
+
+function esFlexPorPrefijo(codigo: string | null): boolean {
+  if (!codigo) return false;
+  const m = codigo.trim().match(/^([A-Za-z]+)/i);
+  return m ? FLEX_PREFIXES.has(m[1].toUpperCase()) : false;
+}
+
 interface FormRow {
   id: string;
   codigo: string;
   descripcion: string;
   detalle_horario: string;
-  agrupador: string;
+  agrupador: string; // '' = sin asignar (prefijo ambiguo o sin código)
   horas_diarias_decl: string;
   horas_sem_decl: string;
   es_flex: boolean;
@@ -36,6 +44,19 @@ const makeRow = (): FormRow => ({
   es_flex: false,
 });
 
+function fromImportado(p: PedidoCargado): FormRow {
+  return {
+    id: Math.random().toString(36).slice(2),
+    codigo: p.codigo ?? '',
+    descripcion: p.descripcion ?? '',
+    detalle_horario: p.detalle_horario ?? '',
+    agrupador: p.agrupador != null ? String(p.agrupador) : '',
+    horas_diarias_decl: p.horas_diarias_decl != null ? String(p.horas_diarias_decl) : '',
+    horas_sem_decl: p.horas_sem_decl != null ? String(p.horas_sem_decl) : '',
+    es_flex: esFlexPorPrefijo(p.codigo),
+  };
+}
+
 interface Props {
   tablasState: TablasState | null;
   staleHours: number;
@@ -50,7 +71,19 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
   const [showStaleWarning, setShowStaleWarning] = useState(false);
   const [pendingPedidos, setPendingPedidos] = useState<PedidoIn[] | null>(null);
 
+  // Import RRHH
+  const [importLoading, setImportLoading] = useState(false);
+  const [importDragOver, setImportDragOver] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ total: number; sinAgrupador: number } | null>(null);
+  // Selección de solapa
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [solapas, setSolapas] = useState<string[]>([]);
+  const [solapaSeleccionada, setSolapaSeleccionada] = useState('');
+  const importRef = useRef<HTMLInputElement>(null);
+
   const tablasOk = tablasState !== null;
+  const hasSinAgrupador = rows.some(r => r.agrupador === '');
+  const eligiendoSolapa = !importLoading && pendingFile !== null && solapas.length > 1;
 
   const update = (id: string, field: keyof FormRow, value: string | boolean) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
@@ -58,7 +91,56 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
   const removeRow = (id: string) =>
     setRows(prev => prev.filter(r => r.id !== id));
 
+  const handleCargarSolapa = async (file: File, solapa: string) => {
+    setImportLoading(true);
+    try {
+      const result = await cargarPedido(file, solapa);
+      const newRows = result.pedidos.map(fromImportado);
+      setRows(newRows.length > 0 ? newRows : [makeRow()]);
+      const sinAgrupador = newRows.filter(r => r.agrupador === '').length;
+      setImportSummary({ total: result.n_pedidos, sinAgrupador });
+      setPendingFile(null);
+      setSolapas([]);
+    } catch (e: unknown) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleFileSelected = async (file: File) => {
+    setImportLoading(true);
+    setImportSummary(null);
+    setPendingFile(null);
+    setSolapas([]);
+    try {
+      const result = await listarSolapas(file);
+      if (result.solapas.length === 1) {
+        await handleCargarSolapa(file, result.solapas[0]);
+      } else {
+        setPendingFile(file);
+        setSolapas(result.solapas);
+        setSolapaSeleccionada(result.solapas[0]);
+        setImportLoading(false);
+      }
+    } catch (e: unknown) {
+      onError(e instanceof Error ? e.message : String(e));
+      setImportLoading(false);
+    }
+  };
+
+  const handleCancelarSolapa = () => {
+    setPendingFile(null);
+    setSolapas([]);
+    setSolapaSeleccionada('');
+  };
+
   const buildPedidos = (): PedidoIn[] | null => {
+    if (hasSinAgrupador) {
+      const n = rows.filter(r => r.agrupador === '').length;
+      onError(`Seleccioná el agrupador en ${n} fila(s) resaltada(s) antes de analizar.`);
+      return null;
+    }
     const pedidos: PedidoIn[] = rows.map(r => ({
       codigo: r.codigo.trim(),
       descripcion: r.descripcion.trim(),
@@ -92,7 +174,6 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
     const pedidos = buildPedidos();
     if (!pedidos) return;
 
-    // Guard rail: advertir si las tablas tienen más de `staleHours` horas
     if (tablasState && Date.now() - tablasState.loadedAt > staleHours * 3600 * 1000) {
       setPendingPedidos(pedidos);
       setShowStaleWarning(true);
@@ -120,6 +201,123 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
 
   return (
     <>
+      {/* Panel de importación del Excel de RRHH */}
+      <div className="sap-panel" style={{ marginBottom: 8 }}>
+        <div className="sap-panel-title">Importar pedido de RRHH (Excel)</div>
+        <div style={{ padding: '8px 8px 10px' }}>
+          <div
+            className={[
+              'sap-drop-zone',
+              (importSummary && !importLoading) ? 'loaded' : '',
+              importDragOver ? 'drag-over' : '',
+              eligiendoSolapa ? 'loaded' : '',
+            ].join(' ')}
+            style={{
+              maxWidth: 520,
+              minHeight: 64,
+              cursor: eligiendoSolapa ? 'default' : 'pointer',
+            }}
+            onClick={() => { if (!eligiendoSolapa) importRef.current?.click(); }}
+            onDragOver={(e) => { if (!eligiendoSolapa) { e.preventDefault(); setImportDragOver(true); } }}
+            onDragLeave={() => setImportDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setImportDragOver(false);
+              if (!eligiendoSolapa) {
+                const f = e.dataTransfer.files[0];
+                if (f) handleFileSelected(f);
+              }
+            }}
+          >
+            {importLoading ? (
+              <>
+                <span style={{ fontSize: 18 }}>&#8635;</span>
+                <span>{pendingFile ? 'Cargando pedido...' : 'Leyendo archivo...'}</span>
+              </>
+            ) : eligiendoSolapa ? (
+              <>
+                <span style={{ fontSize: 14 }}>&#128193; {pendingFile!.name}</span>
+                <span style={{ fontSize: 11, color: '#555' }}>
+                  El archivo tiene {solapas.length} solapas
+                </span>
+              </>
+            ) : importSummary ? (
+              <>
+                <span style={{ fontSize: 18 }}>&#10003;</span>
+                <span style={{ fontWeight: 'bold', color: '#006600' }}>
+                  {importSummary.total} pedido(s) importado(s) — grilla precargada
+                </span>
+                {importSummary.sinAgrupador > 0 && (
+                  <span style={{ fontSize: 11, color: '#9E5000' }}>
+                    &#9888; {importSummary.sinAgrupador} fila(s) sin agrupador — seleccionarlo antes de analizar
+                  </span>
+                )}
+                <span style={{ fontSize: 10, color: '#888', marginTop: 2 }}>
+                  [cargar otro Excel]
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: 20 }}>&#128193;</span>
+                <span>Click o arrastrar el Excel de pedido de RRHH</span>
+                <span style={{ fontSize: 11, color: '#888' }}>
+                  Precarga la grilla automáticamente con los pedidos del archivo
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Selector de solapa — aparece solo cuando hay más de una */}
+          {eligiendoSolapa && (
+            <div style={{
+              maxWidth: 520,
+              marginTop: 6,
+              padding: '7px 8px',
+              background: '#E8E5DC',
+              border: '1px solid #A0A0A0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Elegí la solapa a leer:</span>
+              <select
+                className="sap-select"
+                style={{ flex: 1, minWidth: 120 }}
+                value={solapaSeleccionada}
+                onChange={e => setSolapaSeleccionada(e.target.value)}
+              >
+                {solapas.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <button
+                className="sap-btn sap-btn-primary"
+                onClick={() => handleCargarSolapa(pendingFile!, solapaSeleccionada)}
+              >
+                Cargar
+              </button>
+              <button className="sap-btn" onClick={handleCancelarSolapa}>
+                Cancelar
+              </button>
+            </div>
+          )}
+
+          <input
+            ref={importRef}
+            type="file"
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFileSelected(f);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Panel de grilla de pedidos */}
       <div className="sap-panel">
         <div className="sap-panel-title">Pedidos de Turno</div>
 
@@ -127,6 +325,19 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
           {!tablasOk && (
             <div style={{ color: '#CC0000', marginBottom: 8, fontSize: 12 }}>
               &#9888; Primero cargá las tablas SAP (pestaña anterior).
+            </div>
+          )}
+          {hasSinAgrupador && (
+            <div style={{
+              color: '#9E5000',
+              background: '#FFF3CD',
+              border: '1px solid #FFEAA0',
+              padding: '4px 8px',
+              marginBottom: 8,
+              fontSize: 12,
+            }}>
+              &#9888; Las filas resaltadas tienen prefijo ambiguo (SC) o sin código.
+              Seleccioná el agrupador manualmente antes de analizar.
             </div>
           )}
 
@@ -140,7 +351,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
                   <th style={{ width: 240 }}>
                     Detalle Horario <span style={{ color: '#CC0000' }}>*</span>
                   </th>
-                  <th style={{ width: 150 }}>Agrupador</th>
+                  <th style={{ width: 155 }}>Agrupador <span style={{ color: '#CC0000' }}>*</span></th>
                   <th style={{ width: 75 }}>H. Diarias</th>
                   <th style={{ width: 75 }}>H. Semanales</th>
                   <th style={{ width: 42, textAlign: 'center' }}>FLEX</th>
@@ -148,113 +359,136 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => (
-                  <tr key={row.id}>
-                    <td style={{ textAlign: 'center', color: '#888' }}>{idx + 1}</td>
-                    <td>
-                      <input
-                        className="sap-input"
-                        style={{ width: '100%' }}
-                        value={row.codigo}
-                        onChange={e => update(row.id, 'codigo', e.target.value)}
-                        placeholder="ej. LS0123"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="sap-input"
-                        style={{ width: '100%' }}
-                        value={row.descripcion}
-                        onChange={e => update(row.id, 'descripcion', e.target.value)}
-                        placeholder="descripción"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="sap-input"
-                        style={{ width: '100%' }}
-                        value={row.detalle_horario}
-                        onChange={e => update(row.id, 'detalle_horario', e.target.value)}
-                        placeholder="ej. L a V 07:00 a 13:00 FSI"
-                      />
-                    </td>
-                    <td>
-                      <select
-                        className="sap-select"
-                        style={{ width: '100%' }}
-                        value={row.agrupador}
-                        onChange={e => update(row.id, 'agrupador', e.target.value)}
-                      >
-                        {AGRUPADORES.map(a => (
-                          <option key={a.value} value={a.value}>{a.label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        className="sap-input"
-                        style={{ width: '100%' }}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={row.horas_diarias_decl}
-                        onChange={e => update(row.id, 'horas_diarias_decl', e.target.value)}
-                        placeholder="6.00"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="sap-input"
-                        style={{ width: '100%' }}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={row.horas_sem_decl}
-                        onChange={e => update(row.id, 'horas_sem_decl', e.target.value)}
-                        placeholder="30.00"
-                      />
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={row.es_flex}
-                        onChange={e => update(row.id, 'es_flex', e.target.checked)}
-                      />
-                    </td>
-                    <td>
-                      {rows.length > 1 && (
-                        <button
-                          className="sap-btn"
-                          style={{ minWidth: 'auto', padding: '1px 5px', color: '#CC0000' }}
-                          onClick={() => removeRow(row.id)}
-                          title="Eliminar fila"
+                {rows.map((row, idx) => {
+                  const needsAgrupador = row.agrupador === '';
+                  return (
+                    <tr
+                      key={row.id}
+                      style={needsAgrupador ? {
+                        background: '#FFF3CD',
+                        boxShadow: 'inset 3px 0 0 #E09000',
+                      } : undefined}
+                    >
+                      <td style={{ textAlign: 'center', color: needsAgrupador ? '#9E5000' : '#888', fontWeight: needsAgrupador ? 'bold' : undefined }}>
+                        {needsAgrupador ? '!' : idx + 1}
+                      </td>
+                      <td>
+                        <input
+                          className="sap-input"
+                          style={{ width: '100%' }}
+                          value={row.codigo}
+                          onChange={e => update(row.id, 'codigo', e.target.value)}
+                          placeholder="ej. LS0123"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="sap-input"
+                          style={{ width: '100%' }}
+                          value={row.descripcion}
+                          onChange={e => update(row.id, 'descripcion', e.target.value)}
+                          placeholder="descripción"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="sap-input"
+                          style={{ width: '100%' }}
+                          value={row.detalle_horario}
+                          onChange={e => update(row.id, 'detalle_horario', e.target.value)}
+                          placeholder="ej. L a V 07:00 a 13:00 FSI"
+                        />
+                      </td>
+                      <td>
+                        <select
+                          className="sap-select"
+                          style={{
+                            width: '100%',
+                            ...(needsAgrupador ? { outline: '1px solid #E09000' } : {}),
+                          }}
+                          value={row.agrupador}
+                          onChange={e => update(row.id, 'agrupador', e.target.value)}
                         >
-                          &#10005;
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          {needsAgrupador && (
+                            <option value="">— elegir línea —</option>
+                          )}
+                          {AGRUPADORES.map(a => (
+                            <option key={a.value} value={a.value}>{a.label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          className="sap-input"
+                          style={{ width: '100%' }}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={row.horas_diarias_decl}
+                          onChange={e => update(row.id, 'horas_diarias_decl', e.target.value)}
+                          placeholder="6.00"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="sap-input"
+                          style={{ width: '100%' }}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={row.horas_sem_decl}
+                          onChange={e => update(row.id, 'horas_sem_decl', e.target.value)}
+                          placeholder="30.00"
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={row.es_flex}
+                          onChange={e => update(row.id, 'es_flex', e.target.checked)}
+                        />
+                      </td>
+                      <td>
+                        {rows.length > 1 && (
+                          <button
+                            className="sap-btn"
+                            style={{ minWidth: 'auto', padding: '1px 5px', color: '#CC0000' }}
+                            onClick={() => removeRow(row.id)}
+                            title="Eliminar fila"
+                          >
+                            &#10005;
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button className="sap-btn" onClick={() => setRows(prev => [...prev, makeRow()])}>
               + Agregar fila
             </button>
             <button
               className="sap-btn sap-btn-primary"
               onClick={handleAnalizar}
-              disabled={loading || !tablasOk}
+              disabled={loading || !tablasOk || hasSinAgrupador}
+              title={hasSinAgrupador ? 'Completá el agrupador en las filas resaltadas' : undefined}
             >
-              {loading ? 'Analizando...' : '&#9654; Analizar'}
+              {loading ? 'Analizando...' : '&#9654; Analizar todos'}
             </button>
+            {hasSinAgrupador && (
+              <span style={{ fontSize: 11, color: '#9E5000' }}>
+                &#9888; Completá el agrupador en las filas resaltadas para continuar
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Dialog de advertencia por tablas desactualizadas */}
+      {/* Dialog: tablas desactualizadas */}
       {showStaleWarning && tablasState && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

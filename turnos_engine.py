@@ -343,9 +343,10 @@ class MotorTurnos:
                 anchos.setdefault(pref, len(num))  # ancho de relleno (R187 -> 3)
         return familias, anchos
 
-    def proponer_correlativo(self, capa: str, agrupador: int, familia_prefijo: str):
+    def proponer_correlativo(self, capa: str, agrupador: int, familia_prefijo: str, reservas=None):
         """capa: 'diario' | 'periodico' | 'turno'.
-        Devuelve dict con el codigo propuesto y los huecos informados."""
+        Devuelve dict con el codigo propuesto y los huecos informados.
+        reservas: {(capa, agrupador, familia): set(ints)} — numeros ya reservados en el lote."""
         if capa == 'diario':
             df, col = self.diarios, 'Plan hor.tbjo.diario'
         elif capa == 'periodico':
@@ -354,21 +355,23 @@ class MotorTurnos:
             df, col = self.turnos, 'Regla p.plan h.tbjo.'
 
         familias, anchos = self._familias_de(df, col, agrupador)
-        nums = familias.get(familia_prefijo)
-        if not nums:
+        nums_tabla = familias.get(familia_prefijo)
+        if not nums_tabla:
             return {'propuesto': None,
                     'nota': f'No existe la familia "{familia_prefijo}" en el agrupador {agrupador} '
                             f'(capa {capa}). Familias presentes: {sorted(familias.keys())}',
                     'huecos': []}
-        nums = sorted(nums)
-        ultimo = nums[-1]
+        nums_reservados = (reservas or {}).get((capa, agrupador, familia_prefijo), set())
+        nums_merged = sorted(set(nums_tabla) | nums_reservados)
+        ultimo = nums_merged[-1]
         ancho = anchos.get(familia_prefijo, 3)
         propuesto = f'{familia_prefijo}{ultimo + 1:0{ancho}d}'
-        huecos = [f'{familia_prefijo}{n:0{ancho}d}' for n in range(nums[0], ultimo + 1) if n not in nums]
+        huecos = [f'{familia_prefijo}{n:0{ancho}d}'
+                  for n in range(nums_merged[0], ultimo + 1) if n not in set(nums_merged)]
         return {
             'propuesto': propuesto,
             'ultimo_existente': f'{familia_prefijo}{ultimo:0{ancho}d}',
-            'total_familia': len(nums),
+            'total_familia': len(nums_tabla),
             'huecos': huecos,
             'nota': (f'Propongo {propuesto} (siguiente de {familia_prefijo}{ultimo:0{ancho}d}). '
                      + (f'Hay {len(huecos)} huecos libres NO usados: {huecos[:10]}'
@@ -380,23 +383,25 @@ class MotorTurnos:
     # -----------------------------------------------------------------------
     # Validador de correlativo de TURNO (capa regla LS/LR)
     # -----------------------------------------------------------------------
-    def validar_correlativo_turno(self, agrupador: int, codigo_pedido: str):
-        """Verifica si el codigo que pide el negocio es el correlativo correcto."""
+    def validar_correlativo_turno(self, agrupador: int, codigo_pedido: str, reservas=None):
+        """Verifica si el codigo que pide el negocio es el correlativo correcto.
+        reservas: {(capa, agrupador, familia): set(ints)} — numeros ya reservados en el lote."""
         mt = re.match(r'^([A-Za-z]+)(\d+)$', str(codigo_pedido).strip())
         if not mt:
             return {'estado': 'revisar', 'nota': f'No se pudo interpretar el codigo "{codigo_pedido}"'}
         pref, num = mt.group(1), int(mt.group(2))
         familias, anchos = self._familias_de(self.turnos, 'Regla p.plan h.tbjo.', agrupador)
-        nums = familias.get(pref)
+        nums_tabla = familias.get(pref)
         ancho = anchos.get(pref, len(mt.group(2)))
-        if not nums:
+        if not nums_tabla:
             return {'estado': 'revisar',
                     'nota': f'La familia "{pref}" no existe en el agrupador {agrupador}. '
                             f'Familias presentes: {sorted(familias.keys())}'}
-        nums = sorted(nums)
-        ultimo = nums[-1]
+        nums_reservados = (reservas or {}).get(('turno', agrupador, pref), set())
+        nums_merged = sorted(set(nums_tabla) | nums_reservados)
+        ultimo = nums_merged[-1]
         esperado = ultimo + 1
-        ya_existe = num in set(nums)
+        ya_existe = num in set(nums_tabla) or num in nums_reservados
         if ya_existe:
             estado = 'duplicado'
             nota = f'{codigo_pedido} YA EXISTE en el agrupador (ultimo de la familia: {pref}{ultimo:0{ancho}d}).'
@@ -439,10 +444,17 @@ class MotorTurnos:
     # -----------------------------------------------------------------------
     # ORQUESTADOR: analizar un pedido completo -> dict listo para JSON
     # -----------------------------------------------------------------------
-    def analizar_pedido(self, codigo_pedido: str, descripcion: str, detalle_horario: str,
-                        agrupador: int, horas_diarias_decl=None, horas_sem_decl=None,
-                        es_flex=False):
-        from dataclasses import asdict
+    def _registrar_reserva(self, reservas, capa, agrupador, codigo):
+        """Agrega el numero de un codigo al set de reservas del lote."""
+        if not codigo:
+            return
+        mt = re.match(r'^([A-Za-z]+)(\d+)$', str(codigo).strip())
+        if mt:
+            key = (capa, agrupador, mt.group(1))
+            reservas.setdefault(key, set()).add(int(mt.group(2)))
+
+    def _analizar_impl(self, codigo_pedido, descripcion, detalle_horario,
+                       agrupador, horas_diarias_decl, horas_sem_decl, es_flex, reservas):
         p = parse_horario(detalle_horario)
         out = {
             'pedido': {'codigo': codigo_pedido, 'descripcion': descripcion,
@@ -462,7 +474,6 @@ class MotorTurnos:
         if not p.ok:
             return out
 
-        # --- Validacion de horas (muestra exacto, no redondea) ---
         v = {}
         if horas_diarias_decl is not None:
             coincide = abs(float(horas_diarias_decl) - p.horas_diarias_calc) < 0.001
@@ -474,10 +485,8 @@ class MotorTurnos:
                               'coincide': coincide}
         out['validaciones'] = v
 
-        # --- Capa TURNO: correlativo ---
-        out['turno'] = self.validar_correlativo_turno(agrupador, codigo_pedido)
+        out['turno'] = self.validar_correlativo_turno(agrupador, codigo_pedido, reservas)
 
-        # --- Capa DIARIO ---
         rb = self.buscar_diario(agrupador, p.hora_inicio, p.hora_fin)
         if rb.existe:
             codigo_diario = rb.codigos[0][0]
@@ -486,14 +495,12 @@ class MotorTurnos:
                              'duplicado': rb.duplicado, 'notas': rb.notas}
         else:
             fam = self.familia_objetivo('diario', agrupador, es_flex)
-            prop = self.proponer_correlativo('diario', agrupador, fam)
+            prop = self.proponer_correlativo('diario', agrupador, fam, reservas)
             codigo_diario = prop['propuesto']
             out['diario'] = {'accion': 'crear', 'codigo_propuesto': codigo_diario,
                              'familia': fam, 'detalle': prop}
-            # tolerancia solo cuando hay que crear el diario
             out['tolerancia'] = calcular_tolerancia(p.hora_inicio, p.hora_fin)
 
-        # --- Capa PERIODICO ---
         grilla = self.construir_grilla(codigo_diario, p.dias_trabaja)
         rp = self.buscar_periodico(agrupador, grilla)
         if rp.existe:
@@ -501,17 +508,57 @@ class MotorTurnos:
                                 'duplicado': rp.duplicado, 'notas': rp.notas}
         else:
             fam = self.familia_objetivo('periodico', agrupador, es_flex)
-            prop = self.proponer_correlativo('periodico', agrupador, fam)
+            prop = self.proponer_correlativo('periodico', agrupador, fam, reservas)
             out['periodico'] = {'accion': 'crear', 'codigo_propuesto': prop['propuesto'],
                                 'familia': fam, 'detalle': prop}
 
-        # --- Cuadrito (grilla 7 dias para cargar en SAP) ---
         out['cuadrito'] = {
             'dias': _DIA_NOMBRE,
             'celdas': list(grilla),
             'codigo_diario_usado': codigo_diario,
         }
         return out
+
+    def analizar_pedido(self, codigo_pedido: str, descripcion: str, detalle_horario: str,
+                        agrupador: int, horas_diarias_decl=None, horas_sem_decl=None,
+                        es_flex=False):
+        return self._analizar_impl(codigo_pedido, descripcion, detalle_horario,
+                                   agrupador, horas_diarias_decl, horas_sem_decl, es_flex, None)
+
+    def analizar_lote(self, pedidos):
+        """Analiza una lista de pedidos encadenando correlativos entre si.
+        pedidos: lista de dicts con keys codigo, descripcion, detalle_horario, agrupador,
+                 horas_diarias_decl (opt), horas_sem_decl (opt), es_flex (opt).
+        Devuelve lista de resultados en el mismo formato que analizar_pedido."""
+        reservas = {}
+        resultados = []
+        for p in pedidos:
+            codigo = p.get('codigo')
+            agrupador = p.get('agrupador')
+            try:
+                r = self._analizar_impl(
+                    codigo,
+                    p.get('descripcion', '') or '',
+                    p.get('detalle_horario', '') or '',
+                    agrupador,
+                    p.get('horas_diarias_decl'),
+                    p.get('horas_sem_decl'),
+                    p.get('es_flex', False) or False,
+                    reservas,
+                )
+                # Reservar turno siempre (para que el siguiente pedido cuente este numero)
+                self._registrar_reserva(reservas, 'turno', agrupador, codigo)
+                # Reservar diario/periodico solo si se van a crear
+                if r.get('diario', {}).get('accion') == 'crear':
+                    self._registrar_reserva(reservas, 'diario', agrupador,
+                                            r['diario'].get('codigo_propuesto'))
+                if r.get('periodico', {}).get('accion') == 'crear':
+                    self._registrar_reserva(reservas, 'periodico', agrupador,
+                                            r['periodico'].get('codigo_propuesto'))
+            except Exception as exc:
+                r = {'error': str(exc), 'pedido': {'codigo': codigo}}
+            resultados.append(r)
+        return resultados
 
 
 # ---------------------------------------------------------------------------
