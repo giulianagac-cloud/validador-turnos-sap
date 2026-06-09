@@ -199,6 +199,82 @@ def generar_multihorario(detalle_horario: str, dias_franco: list) -> Grilla:
 
 
 # ---------------------------------------------------------------------------
+# Generador ROTATIVO multisemana (caso ROCA TPTE 26)
+# Patrón verificado: el franco es una "bisagra". En cada semana, a la DERECHA
+# del franco va el horario propio de esa semana; a la IZQUIERDA, el de la otra.
+# El franco se corre un día por cada variante (LUNES, MARTES, ...).
+# ---------------------------------------------------------------------------
+def generar_rotativo(horarios_semana: list, dia_franco: str) -> Grilla:
+    """
+    horarios_semana: lista de rangos canónicos, uno por semana del ciclo.
+        ej. ['11:00-19:00', '03:00-11:00']  (SEM1 tarde, SEM2 mañana)
+    dia_franco: nombre del día de franco, ej. 'LUNES'
+
+    Aplica la bisagra: en la semana i, los días DESPUÉS del franco usan el
+    horario de la semana i; los días ANTES del franco usan el de la semana
+    anterior del ciclo (i-1, con wraparound).
+    """
+    g = Grilla()
+    n = len(horarios_semana)
+    f = _dia_a_idx(dia_franco)
+    if f is None:
+        g.notas.append(f'Día de franco no reconocido: "{dia_franco}" -> REVISAR')
+        return g
+    if n < 2:
+        g.notas.append('Rotativo necesita al menos 2 semanas. Usar generar_franco_corrido para 1 semana.')
+        return g
+
+    for i in range(n):
+        semana = []
+        horario_propio = horarios_semana[i]
+        horario_previo = horarios_semana[(i - 1) % n]   # el de la semana anterior del ciclo
+        for d in range(7):
+            if d == f:
+                semana.append(Celda(es_franco=True))
+            elif d > f:
+                # después del franco: horario propio de esta semana
+                semana.append(Celda(horario=horario_propio))
+            else:
+                # antes del franco: todavía arrastra el horario de la semana previa
+                semana.append(Celda(horario=horario_previo))
+        g.semanas.append(semana)
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Anclaje temporal: fecha de referencia + punto de arranque
+# Verificado en datos: base FIJA 01/04/2019 (lunes). Cada variante corre la
+# fecha de referencia segun en que semana/dia del ciclo arranca.
+# Pto.arranque queda en 1 (default observado en 10.789 casos).
+# ---------------------------------------------------------------------------
+import datetime
+
+FECHA_REFERENCIA_BASE = datetime.date(2019, 4, 1)   # lunes
+
+
+def calcular_fecha_referencia(indice_variante: int, offset_dia: int = 0) -> dict:
+    """
+    indice_variante: 0=A, 1=B, 2=C... (cada letra = una semana mas adelante en el ciclo)
+    offset_dia: corrimiento adicional de dias (si la rotacion arranca otro dia)
+
+    Devuelve la fecha de referencia y el punto de arranque.
+    """
+    dias_offset = indice_variante * 7 + offset_dia
+    fecha = FECHA_REFERENCIA_BASE + datetime.timedelta(days=dias_offset)
+    return {
+        'fecha_referencia': fecha.strftime('%d.%m.%Y'),
+        'punto_arranque': 1,
+        'dia_semana': fecha.strftime('%A'),
+        'offset_dias': dias_offset,
+    }
+
+
+def variante_a_indice(letra: str) -> int:
+    """'A'->0, 'B'->1, 'C'->2..."""
+    return ord(letra.strip().upper()) - ord('A')
+
+
+# ---------------------------------------------------------------------------
 # Prueba contra el caso real LD573
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
