@@ -5,11 +5,20 @@ export interface PedidoIn {
   agrupador: number;
   horas_diarias_decl?: number | null;
   horas_sem_decl?: number | null;
+  horas_men_decl?: number | null;
   es_flex: boolean;
 }
 
 export interface TablasStatus {
   ok: boolean;
+  n_diarios: number;
+  n_periodicos: number;
+  n_turnos: number;
+}
+
+export interface EstadoTablas {
+  cargadas: boolean;
+  timestamp_ms: number | null;
   n_diarios: number;
   n_periodicos: number;
   n_turnos: number;
@@ -23,9 +32,9 @@ export interface TablasState {
 }
 
 export interface ValidacionHoras {
-  declarado: number;
+  declarado: number | null;
   calculado: number;
-  coincide: boolean;
+  coincide: boolean | null;
 }
 
 export interface ResultadoTurno {
@@ -106,6 +115,7 @@ export interface DiarioResuelto {
   todos?: DiarioDetalle[];
   notas?: string[];
   detalle?: CorrelativoDetalle;
+  tolerancia?: Tolerancia;
 }
 
 export interface AccionDiarioGrilla {
@@ -113,6 +123,7 @@ export interface AccionDiarioGrilla {
   horario: string;
   codigo_propuesto: string;
   detalle: CorrelativoDetalle;
+  tolerancia?: Tolerancia;
 }
 
 export interface FechaReferencia {
@@ -154,6 +165,7 @@ export interface PedidoCargado {
   detalle_horario: string;
   horas_diarias_decl: number | null;
   horas_sem_decl: number | null;
+  horas_men_decl: number | null;
   feriados: string | null;
   agrupador: number | null;
   hoja: string;
@@ -187,6 +199,7 @@ export interface ResultadoAnalisis {
   validaciones: {
     horas_diarias?: ValidacionHoras;
     horas_sem?: ValidacionHoras;
+    horas_men?: ValidacionHoras;
   };
   diario: ResultadoDiario;
   periodico: ResultadoPeriodico;

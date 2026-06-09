@@ -9,7 +9,7 @@ Filosofía: OBSERVA y PROPONE. Nunca elige por el usuario ante ambigüedad.
 from typing import Optional
 
 from generador_grillas import Grilla, calcular_fecha_referencia, DIAS_ORDEN
-from turnos_engine import MotorTurnos
+from turnos_engine import MotorTurnos, calcular_tolerancia
 
 CODIGO_FRANCO = 'LIBR'
 CODIGO_REVISAR = 'REVISAR_MANUAL'
@@ -81,17 +81,20 @@ def resolver_grilla(
             else:
                 prop = motor.proponer_correlativo('diario', agrupador, familia_diario, reservas_intra)
                 codigo_prop = prop['propuesto']
+                tol = calcular_tolerancia(ini, fin)
                 diarios_por_horario[horario] = {
                     'accion': 'crear',
                     'codigo_propuesto': codigo_prop,
                     'familia': familia_diario,
                     'detalle': prop,
+                    'tolerancia': tol,
                 }
                 acciones_diario.append({
                     'tipo': 'crear_diario',
                     'horario': horario,
                     'codigo_propuesto': codigo_prop,
                     'detalle': prop,
+                    'tolerancia': tol,
                 })
                 # Reservar para que el siguiente diario de esta misma grilla tome el siguiente número
                 motor._registrar_reserva(reservas_intra, 'diario', agrupador, codigo_prop)

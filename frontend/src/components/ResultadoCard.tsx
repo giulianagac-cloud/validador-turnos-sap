@@ -115,7 +115,7 @@ export default function ResultadoCard({ resultado: r }: Props) {
             </div>
 
             {/* Validacion de horas */}
-            {(r.validaciones.horas_diarias || r.validaciones.horas_sem) && (
+            {(r.validaciones.horas_diarias || r.validaciones.horas_sem || r.validaciones.horas_men) && (
               <div className="result-section">
                 <div className="result-section-title">Validación de Horas</div>
                 <table className="alv-table" style={{ width: 'auto' }}>
@@ -149,6 +149,22 @@ export default function ResultadoCard({ resultado: r }: Props) {
                           {r.validaciones.horas_sem.coincide
                             ? <span className="semaphore-ok">&#10003; OK</span>
                             : <span className="semaphore-error">&#10007; NO COINCIDE</span>}
+                        </td>
+                      </tr>
+                    )}
+                    {r.validaciones.horas_men && (
+                      <tr>
+                        <td>Mensuales</td>
+                        <td style={{ textAlign: 'right', color: r.validaciones.horas_men.declarado == null ? '#888' : undefined }}>
+                          {r.validaciones.horas_men.declarado != null ? `${r.validaciones.horas_men.declarado}h` : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{r.validaciones.horas_men.calculado}h</td>
+                        <td>
+                          {r.validaciones.horas_men.coincide == null
+                            ? <span style={{ color: '#888', fontSize: 10 }}>referencia</span>
+                            : r.validaciones.horas_men.coincide
+                              ? <span className="semaphore-ok">&#10003; OK</span>
+                              : <span className="semaphore-error">&#10007; NO COINCIDE</span>}
                         </td>
                       </tr>
                     )}
@@ -190,11 +206,39 @@ export default function ResultadoCard({ resultado: r }: Props) {
                 ) : (
                   <div style={{ fontSize: 12 }}>
                     <span className="semaphore-warn">&#10133; Crear:</span>{' '}
-                    <strong style={{ fontFamily: 'monospace' }}>{r.diario.codigo_propuesto}</strong>{' '}
-                    <span style={{ color: '#666' }}>(familia {r.diario.familia})</span>
+                    <strong style={{ fontFamily: 'monospace' }}>{r.diario.codigo_propuesto}</strong>
+                    {r.tolerancia?.inicio_teorico && (
+                      <span style={{ color: '#444' }}>
+                        {' '}({r.tolerancia.inicio_teorico} a {r.tolerancia.final_teorico},{' '}
+                        {r.horario.horas_diarias_calc}h)
+                      </span>
+                    )}
+                    <span style={{ color: '#666', marginLeft: 4 }}>(familia {r.diario.familia})</span>
                     {r.diario.detalle?.nota && (
                       <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
                         {r.diario.detalle.nota}
+                      </div>
+                    )}
+                    {r.tolerancia?.inicio_teorico && (
+                      <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '3px solid #BDB9B3', fontSize: 11, color: '#333', lineHeight: 1.9 }}>
+                        <div>
+                          <span style={{ color: '#666', display: 'inline-block', minWidth: 100 }}>Tol. entrada:</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.inicio_tolerancia}</strong>
+                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
+                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 4px', fontFamily: 'monospace' }}>
+                            [{r.tolerancia.inicio_teorico}]
+                          </span>
+                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.inicio_tolerancia_fin}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#666', display: 'inline-block', minWidth: 100 }}>Tol. salida:</span>
+                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 4px', fontFamily: 'monospace' }}>
+                            [{r.tolerancia.final_teorico}]
+                          </span>
+                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.fin_tolerancia}</strong>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -205,36 +249,6 @@ export default function ResultadoCard({ resultado: r }: Props) {
               </div>
             )}
 
-            {/* Tolerancia */}
-            {r.tolerancia?.inicio_teorico && (
-              <div className="result-section">
-                <div className="result-section-title">Tolerancia del Diario (para crear)</div>
-                <table style={{ fontSize: 12, borderCollapse: 'collapse', lineHeight: 1.7 }}>
-                  <tbody>
-                    <tr>
-                      <td style={{ color: '#888', paddingRight: 10 }}>Inicio tol. (−29 min):</td>
-                      <td><strong>{r.tolerancia.inicio_tolerancia}</strong></td>
-                    </tr>
-                    <tr>
-                      <td style={{ color: '#333' }}>Entrada teórica:</td>
-                      <td><strong>{r.tolerancia.inicio_teorico}</strong></td>
-                    </tr>
-                    <tr>
-                      <td style={{ color: '#888' }}>Fin tol. entrada (+5 min):</td>
-                      <td><strong>{r.tolerancia.inicio_tolerancia_fin}</strong></td>
-                    </tr>
-                    <tr>
-                      <td style={{ color: '#333' }}>Salida teórica:</td>
-                      <td><strong>{r.tolerancia.final_teorico}</strong></td>
-                    </tr>
-                    <tr>
-                      <td style={{ color: '#888' }}>Fin tol. salida (+29 min):</td>
-                      <td><strong>{r.tolerancia.fin_tolerancia}</strong></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
 
           {/* ---- Columna derecha ---- */}

@@ -64,9 +64,9 @@ export default function TablasLoader({ current, onCargado, onError }: Props) {
       {current && (
         <div className="sap-panel" style={{ marginBottom: 8 }}>
           <div className="sap-panel-title" style={{ background: '#1A5C1A' }}>
-            &#10003; Tablas en memoria
+            &#10003; Tablas cargadas el {formatLoadTime(current.loadedAt)}
           </div>
-          <div style={{ padding: '6px 10px', fontSize: 12, display: 'flex', gap: 24, alignItems: 'center' }}>
+          <div style={{ padding: '6px 10px', fontSize: 12, display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
             <span>
               <strong>Diarios:</strong> {current.n_diarios}
             </span>
@@ -76,8 +76,8 @@ export default function TablasLoader({ current, onCargado, onError }: Props) {
             <span>
               <strong>Turnos:</strong> {current.n_turnos}
             </span>
-            <span style={{ color: '#555', marginLeft: 'auto' }}>
-              Cargadas {formatLoadTime(current.loadedAt)}
+            <span style={{ color: '#555', fontSize: 11, marginLeft: 'auto' }}>
+              Persistidas localmente &mdash; disponibles al reiniciar el backend
             </span>
           </div>
         </div>
@@ -92,13 +92,14 @@ export default function TablasLoader({ current, onCargado, onError }: Props) {
         <div style={{ padding: '8px 8px 4px' }}>
           {isReload ? (
             <div style={{ fontSize: 12, color: '#555', marginBottom: 12, lineHeight: 1.5 }}>
-              Seleccioná los 3 exports frescos de SAP para reemplazar las tablas en memoria.
+              Seleccioná los 3 exports frescos de SAP para actualizar y reemplazar las tablas.
               Los correlativos propuestos se recalcularán con los datos nuevos.
             </div>
           ) : (
             <div style={{ fontSize: 12, color: '#555', marginBottom: 12, lineHeight: 1.5 }}>
-              Los archivos se procesan <strong>en memoria</strong> y se descartan al terminar.
-              No se guardan datos de empleados en ningún lado.
+              Las tablas se guardan localmente en <code>data_local/</code> (nunca en el repositorio).
+              Al reiniciar el backend se cargan automáticamente — no hace falta volver a subir los Excels.
+              No se guardan datos de empleados.
             </div>
           )}
 

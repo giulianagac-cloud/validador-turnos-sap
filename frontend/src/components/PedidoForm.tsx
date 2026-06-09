@@ -30,6 +30,7 @@ interface FormRow {
   agrupador: string; // '' = sin asignar (prefijo ambiguo o sin código)
   horas_diarias_decl: string;
   horas_sem_decl: string;
+  horas_men_decl: number | null; // solo se completa desde import Excel
   es_flex: boolean;
 }
 
@@ -41,6 +42,7 @@ const makeRow = (): FormRow => ({
   agrupador: '20',
   horas_diarias_decl: '',
   horas_sem_decl: '',
+  horas_men_decl: null,
   es_flex: false,
 });
 
@@ -53,6 +55,7 @@ function fromImportado(p: PedidoCargado): FormRow {
     agrupador: p.agrupador != null ? String(p.agrupador) : '',
     horas_diarias_decl: p.horas_diarias_decl != null ? String(p.horas_diarias_decl) : '',
     horas_sem_decl: p.horas_sem_decl != null ? String(p.horas_sem_decl) : '',
+    horas_men_decl: p.horas_men_decl ?? null,
     es_flex: esFlexPorPrefijo(p.codigo),
   };
 }
@@ -148,6 +151,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
       agrupador: parseInt(r.agrupador, 10),
       horas_diarias_decl: r.horas_diarias_decl ? parseFloat(r.horas_diarias_decl) : null,
       horas_sem_decl: r.horas_sem_decl ? parseFloat(r.horas_sem_decl) : null,
+      horas_men_decl: r.horas_men_decl,
       es_flex: r.es_flex,
     }));
     const invalid = pedidos.filter(p => !p.codigo || !p.detalle_horario);

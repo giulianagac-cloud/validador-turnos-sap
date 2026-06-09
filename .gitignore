@@ -4,6 +4,9 @@
 *.xls
 *.XLS
 
+# Tablas SAP persistidas localmente — nunca commitear
+data_local/
+
 # Python
 __pycache__/
 *.py[cod]

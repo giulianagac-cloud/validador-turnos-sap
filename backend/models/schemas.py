@@ -9,6 +9,7 @@ class PedidoIn(BaseModel):
     agrupador: int
     horas_diarias_decl: Optional[float] = None
     horas_sem_decl: Optional[float] = None
+    horas_men_decl: Optional[float] = None
     es_flex: bool = False
 
 

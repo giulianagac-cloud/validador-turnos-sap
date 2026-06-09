@@ -1,9 +1,18 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import analizar
 
-app = FastAPI(title="Validador Turnos SAP HCM — Trenes Argentinos")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    analizar._cargar_desde_disco()
+    yield
+
+
+app = FastAPI(title="Validador Turnos SAP HCM — Trenes Argentinos", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

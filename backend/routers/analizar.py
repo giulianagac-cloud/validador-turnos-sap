@@ -1,7 +1,10 @@
 import io
+import json
 import math
+import pathlib
 import re
 import unicodedata
+from datetime import datetime
 from typing import Any, Optional
 
 import pandas as pd
@@ -14,6 +17,57 @@ from turnos_engine import MotorTurnos
 
 router = APIRouter()
 _motor: Optional[MotorTurnos] = None
+
+# ---------------------------------------------------------------------------
+# Persistencia local en data_local/ (nunca se sube al repo)
+# ---------------------------------------------------------------------------
+_DATA_DIR = pathlib.Path(__file__).parent.parent.parent / 'data_local'
+_FILE_DIARIOS = _DATA_DIR / 'diarios.bin'
+_FILE_PERIODICOS = _DATA_DIR / 'periodicos.bin'
+_FILE_TURNOS = _DATA_DIR / 'turnos.bin'
+_FILE_META = _DATA_DIR / 'meta.json'
+
+
+def _leer_meta() -> Optional[dict]:
+    try:
+        return json.loads(_FILE_META.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+
+
+def _guardar_en_disco(bytes_d: bytes, bytes_p: bytes, bytes_t: bytes,
+                      n_diarios: int, n_periodicos: int, n_turnos: int) -> None:
+    _DATA_DIR.mkdir(exist_ok=True)
+    _FILE_DIARIOS.write_bytes(bytes_d)
+    _FILE_PERIODICOS.write_bytes(bytes_p)
+    _FILE_TURNOS.write_bytes(bytes_t)
+    meta = {
+        'timestamp': datetime.now().isoformat(timespec='seconds'),
+        'n_diarios': n_diarios,
+        'n_periodicos': n_periodicos,
+        'n_turnos': n_turnos,
+    }
+    _FILE_META.write_text(json.dumps(meta, ensure_ascii=False), encoding='utf-8')
+
+
+def _cargar_desde_disco() -> None:
+    """Intenta reconstruir _motor desde los archivos en data_local/. Llamado en startup."""
+    global _motor
+    if not _FILE_META.exists() or not _FILE_DIARIOS.exists():
+        return
+    try:
+        buf_d = io.BytesIO(_FILE_DIARIOS.read_bytes())
+        buf_p = io.BytesIO(_FILE_PERIODICOS.read_bytes())
+        buf_t = io.BytesIO(_FILE_TURNOS.read_bytes())
+        _motor = MotorTurnos(buf_d, buf_p, buf_t)
+        meta = _leer_meta() or {}
+        print(f"[startup] Tablas cargadas desde disco: "
+              f"{meta.get('n_diarios',0)} diarios, "
+              f"{meta.get('n_periodicos',0)} periódicos, "
+              f"{meta.get('n_turnos',0)} turnos "
+              f"(cargadas el {meta.get('timestamp','?')})")
+    except Exception as exc:
+        print(f"[startup] No se pudo cargar tablas desde disco: {exc}")
 
 
 def _sanitize(obj: Any) -> Any:
@@ -35,19 +89,41 @@ async def cargar_tablas(
 ):
     global _motor
     try:
-        buf_d = io.BytesIO(await diarios.read())
-        buf_p = io.BytesIO(await periodicos.read())
-        buf_t = io.BytesIO(await turnos.read())
-        motor = MotorTurnos(buf_d, buf_p, buf_t)
+        bytes_d = await diarios.read()
+        bytes_p = await periodicos.read()
+        bytes_t = await turnos.read()
+        motor = MotorTurnos(io.BytesIO(bytes_d), io.BytesIO(bytes_p), io.BytesIO(bytes_t))
         _motor = motor
-        return {
-            "ok": True,
-            "n_diarios": len(motor.diarios),
-            "n_periodicos": len(motor.periodicos),
-            "n_turnos": len(motor.turnos),
-        }
+        n_d = len(motor.diarios)
+        n_p = len(motor.periodicos)
+        n_t = len(motor.turnos)
+        _guardar_en_disco(bytes_d, bytes_p, bytes_t, n_d, n_p, n_t)
+        return {"ok": True, "n_diarios": n_d, "n_periodicos": n_p, "n_turnos": n_t}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Error al cargar tablas: {exc}")
+
+
+@router.get("/estado-tablas")
+def estado_tablas():
+    """Devuelve el estado actual de las tablas cargadas (en memoria / desde disco)."""
+    if _motor is None:
+        return {"cargadas": False, "timestamp_ms": None,
+                "n_diarios": 0, "n_periodicos": 0, "n_turnos": 0}
+    meta = _leer_meta()
+    ts_ms: Optional[int] = None
+    if meta and meta.get('timestamp'):
+        try:
+            dt = datetime.fromisoformat(meta['timestamp'])
+            ts_ms = int(dt.timestamp() * 1000)
+        except Exception:
+            pass
+    return {
+        "cargadas": True,
+        "timestamp_ms": ts_ms,
+        "n_diarios": len(_motor.diarios),
+        "n_periodicos": len(_motor.periodicos),
+        "n_turnos": len(_motor.turnos),
+    }
 
 
 @router.post("/analizar")
@@ -66,6 +142,7 @@ async def analizar(req: AnalisisRequest):
             'agrupador': p.agrupador,
             'horas_diarias_decl': p.horas_diarias_decl,
             'horas_sem_decl': p.horas_sem_decl,
+            'horas_men_decl': p.horas_men_decl,
             'es_flex': p.es_flex,
         }
         for p in req.pedidos
@@ -155,6 +232,7 @@ async def cargar_pedido(
             c_detalle  = _buscar_col(cols, "detalle", "horario") or _buscar_col(cols, "detalle")
             c_hs_dia   = _buscar_col(cols, "horas", "diaria")
             c_hs_sem   = _buscar_col(cols, "horas", "sem")
+            c_hs_men   = _buscar_col(cols, "horas", "men")
             c_feriado  = _buscar_col(cols, "feriado")
 
             for _, fila in df.iterrows():
@@ -168,6 +246,7 @@ async def cargar_pedido(
                     "detalle_horario":    detalle,
                     "horas_diarias_decl": fila.get(c_hs_dia) if c_hs_dia else None,
                     "horas_sem_decl":     fila.get(c_hs_sem) if c_hs_sem else None,
+                    "horas_men_decl":     fila.get(c_hs_men) if c_hs_men else None,
                     "feriados":           fila.get(c_feriado) if c_feriado else None,
                     "agrupador":          _deducir_agrupador(fila.get(c_codigo) if c_codigo else None),
                     "hoja":               hoja,

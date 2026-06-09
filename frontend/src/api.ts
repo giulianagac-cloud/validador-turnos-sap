@@ -1,5 +1,5 @@
 import type {
-  CargarPedidoResponse, GenerarTurnoInput, PedidoIn,
+  CargarPedidoResponse, EstadoTablas, GenerarTurnoInput, PedidoIn,
   ResultadoAnalisis, ResultadoGrilla, TablasStatus,
 } from './types';
 
@@ -58,6 +58,12 @@ export async function listarSolapas(archivo: File): Promise<{ ok: boolean; solap
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Error al leer el archivo');
   }
+  return res.json();
+}
+
+export async function estadoTablas(): Promise<EstadoTablas> {
+  const res = await fetch(`${BASE}/estado-tablas`);
+  if (!res.ok) throw new Error('Error al consultar estado de tablas');
   return res.json();
 }
 

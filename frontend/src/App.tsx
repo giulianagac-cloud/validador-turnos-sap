@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import TablasLoader from './components/TablasLoader';
 import PedidoForm from './components/PedidoForm';
 import GeneradorGrilla from './components/GeneradorGrilla';
 import ResultadoCard from './components/ResultadoCard';
 import type { TablasState, ResultadoAnalisis } from './types';
+import { estadoTablas } from './api';
 import { formatLoadTime, formatElapsed } from './utils';
 
 // Horas tras las cuales se muestra la advertencia de tablas desactualizadas
@@ -15,8 +16,33 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('tablas');
   const [tablas, setTablas] = useState<TablasState | null>(null);
   const [resultados, setResultados] = useState<ResultadoAnalisis[]>([]);
-  const [statusMsg, setStatusMsg] = useState('Listo. Cargá los 3 Excels de SAP para comenzar.');
+  const [statusMsg, setStatusMsg] = useState('Consultando estado del servidor...');
   const [statusType, setStatusType] = useState<'ok' | 'error' | 'info'>('info');
+
+  useEffect(() => {
+    estadoTablas()
+      .then(estado => {
+        if (estado.cargadas && estado.timestamp_ms) {
+          const state: TablasState = {
+            n_diarios: estado.n_diarios,
+            n_periodicos: estado.n_periodicos,
+            n_turnos: estado.n_turnos,
+            loadedAt: estado.timestamp_ms,
+          };
+          setTablas(state);
+          setStatusMsg(`Tablas cargadas el ${formatLoadTime(estado.timestamp_ms)} — listo para analizar.`);
+          setStatusType('ok');
+          setTab('pedido');
+        } else {
+          setStatusMsg('Listo. Cargá los 3 Excels de SAP para comenzar.');
+          setStatusType('info');
+        }
+      })
+      .catch(() => {
+        setStatusMsg('No se pudo conectar con el backend. Verificá que esté corriendo.');
+        setStatusType('error');
+      });
+  }, []);
 
   const setStatus = (msg: string, type: 'ok' | 'error' | 'info' = 'info') => {
     setStatusMsg(msg);

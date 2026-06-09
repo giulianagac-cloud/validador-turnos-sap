@@ -407,9 +407,40 @@ function ResultadoGrillaPanel({ resultado }: { resultado: ResultadoGrilla }) {
                   <tr key={i}>
                     <td>Diario</td>
                     <td style={{ fontWeight: 'bold', color: '#0A246A' }}>CREAR</td>
-                    <td><strong>{a.codigo_propuesto}</strong></td>
+                    <td>
+                      <strong>{a.codigo_propuesto}</strong>
+                      {a.tolerancia && (
+                        <span style={{ color: '#555', fontWeight: 'normal', marginLeft: 4 }}>
+                          ({a.tolerancia.inicio_teorico} a {a.tolerancia.final_teorico})
+                        </span>
+                      )}
+                    </td>
                     <td>{a.detalle?.ultimo_existente ?? '—'}</td>
-                    <td style={{ maxWidth: 300 }}>{a.horario} — {a.detalle?.nota}</td>
+                    <td style={{ maxWidth: 300 }}>
+                      {a.horario} — {a.detalle?.nota}
+                      {a.tolerancia && (
+                        <div style={{ marginTop: 4, paddingLeft: 6, borderLeft: '2px solid #BDB9B3', fontSize: 10, color: '#444', lineHeight: 1.8 }}>
+                          <div>
+                            <span style={{ color: '#888', marginRight: 3 }}>Tol. entrada:</span>
+                            <strong>{a.tolerancia.inicio_tolerancia}</strong>
+                            <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
+                            <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 2px', fontFamily: 'monospace' }}>
+                              [{a.tolerancia.inicio_teorico}]
+                            </span>
+                            <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
+                            <strong>{a.tolerancia.inicio_tolerancia_fin}</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: '#888', marginRight: 3 }}>Tol. salida: &nbsp;&nbsp;&nbsp;</span>
+                            <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 2px', fontFamily: 'monospace' }}>
+                              [{a.tolerancia.final_teorico}]
+                            </span>
+                            <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
+                            <strong>{a.tolerancia.fin_tolerancia}</strong>
+                          </div>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

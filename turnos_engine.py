@@ -492,7 +492,7 @@ class MotorTurnos:
             reservas.setdefault(key, set()).add(int(mt.group(2)))
 
     def _analizar_impl(self, codigo_pedido, descripcion, detalle_horario,
-                       agrupador, horas_diarias_decl, horas_sem_decl, es_flex, reservas):
+                       agrupador, horas_diarias_decl, horas_sem_decl, horas_men_decl, es_flex, reservas):
         p = parse_horario(detalle_horario)
         out = {
             'pedido': {'codigo': codigo_pedido, 'descripcion': descripcion,
@@ -521,6 +521,14 @@ class MotorTurnos:
             coincide = abs(float(horas_sem_decl) - p.horas_semanales_calc) < 0.001
             v['horas_sem'] = {'declarado': horas_sem_decl, 'calculado': p.horas_semanales_calc,
                               'coincide': coincide}
+        if p.horas_semanales_calc is not None:
+            horas_men_calc = round(p.horas_semanales_calc * 4, 2)
+            if horas_men_decl is not None:
+                coincide = abs(float(horas_men_decl) - horas_men_calc) < 0.001
+                v['horas_men'] = {'declarado': float(horas_men_decl), 'calculado': horas_men_calc,
+                                  'coincide': coincide}
+            else:
+                v['horas_men'] = {'declarado': None, 'calculado': horas_men_calc, 'coincide': None}
         out['validaciones'] = v
 
         out['turno'] = self.validar_correlativo_turno(agrupador, codigo_pedido, reservas)
@@ -559,9 +567,9 @@ class MotorTurnos:
 
     def analizar_pedido(self, codigo_pedido: str, descripcion: str, detalle_horario: str,
                         agrupador: int, horas_diarias_decl=None, horas_sem_decl=None,
-                        es_flex=False):
+                        horas_men_decl=None, es_flex=False):
         return self._analizar_impl(codigo_pedido, descripcion, detalle_horario,
-                                   agrupador, horas_diarias_decl, horas_sem_decl, es_flex, None)
+                                   agrupador, horas_diarias_decl, horas_sem_decl, horas_men_decl, es_flex, None)
 
     def analizar_lote(self, pedidos):
         """Analiza una lista de pedidos encadenando correlativos entre si.
@@ -581,6 +589,7 @@ class MotorTurnos:
                     agrupador,
                     p.get('horas_diarias_decl'),
                     p.get('horas_sem_decl'),
+                    p.get('horas_men_decl'),
                     p.get('es_flex', False) or False,
                     reservas,
                 )
