@@ -470,6 +470,9 @@ class MotorTurnos:
         else:
             df, col = self.turnos, 'Regla p.plan h.tbjo.'
         familias, _ = self._familias_de(df, col, agrupador)
+        # Caso especial: Roca (24), periódico no-flex → preferir serie "R" sobre "RA" u otras
+        if capa == 'periodico' and agrupador == 24 and not es_flex and 'R' in familias:
+            return 'R'
         prefijos = sorted(familias.keys(), key=lambda p: -len(p))  # mas largos primero (FLEX suele ser mas largo)
         flex_pref = [p for p in prefijos if any(f in p.upper() for f in ['F', 'FL'])]
         normal_pref = [p for p in prefijos if p not in flex_pref]

@@ -26,10 +26,9 @@ export default function ResultadoCard({ resultado: r }: Props) {
 
   const copiarCuadrito = () => {
     if (!r.cuadrito?.celdas) return;
-    const header = r.cuadrito.dias.join('\t');
-    const fila = r.cuadrito.celdas.join('\t');
-    navigator.clipboard.writeText(`${header}\n${fila}`).then(
-      () => alert('Cuadrito copiado al portapapeles (formato TSV, pegable en Excel).'),
+    const fila = '001\t' + r.cuadrito.celdas.join('\t');
+    navigator.clipboard.writeText(fila).then(
+      () => alert('Cuadrito copiado al portapapeles (formato SAP: Nº semana + 7 diarios, pegable directo en SAP).'),
       () => alert('No se pudo acceder al portapapeles.'),
     );
   };
@@ -302,6 +301,7 @@ export default function ResultadoCard({ resultado: r }: Props) {
                 <table className="alv-table">
                   <thead>
                     <tr>
+                      <th style={{ textAlign: 'center', minWidth: 36 }}>N&#186;</th>
                       {r.cuadrito.dias.map(d => (
                         <th key={d} style={{ textAlign: 'center', minWidth: 52 }}>
                           {d.slice(0, 2)}
@@ -311,6 +311,7 @@ export default function ResultadoCard({ resultado: r }: Props) {
                   </thead>
                   <tbody>
                     <tr>
+                      <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 'bold', color: '#555' }}>001</td>
                       {r.cuadrito.celdas.map((c, i) => (
                         <td
                           key={i}

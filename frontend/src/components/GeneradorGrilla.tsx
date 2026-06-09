@@ -318,7 +318,7 @@ function ResultadoGrillaPanel({ resultado }: { resultado: ResultadoGrilla }) {
           <table className="alv-table" style={{ minWidth: 500 }}>
             <thead>
               <tr>
-                <th style={semFijoStyle}>Semana</th>
+                <th style={{ ...semFijoStyle, width: 42, textAlign: 'center' }}>N&#186;</th>
                 {resultado.dias.map(d => (
                   <th key={d} style={{ ...semFijoStyle, width: 80, textAlign: 'center' }}>
                     {d.slice(0, 2)}
@@ -329,8 +329,8 @@ function ResultadoGrillaPanel({ resultado }: { resultado: ResultadoGrilla }) {
             <tbody>
               {resultado.semanas_codigos.map((sem, i) => (
                 <tr key={i}>
-                  <td style={{ fontWeight: 'bold', fontSize: 12, whiteSpace: 'nowrap' }}>
-                    Semana {i + 1}
+                  <td style={{ fontWeight: 'bold', fontSize: 12, textAlign: 'center', fontFamily: 'monospace' }}>
+                    {String(i + 1).padStart(3, '0')}
                   </td>
                   {sem.map((cod, j) => (
                     <td key={j} style={cellStyle(cod, resultado.diarios)}>
