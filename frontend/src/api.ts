@@ -1,4 +1,7 @@
-import type { CargarPedidoResponse, PedidoIn, TablasStatus, ResultadoAnalisis } from './types';
+import type {
+  CargarPedidoResponse, GenerarTurnoInput, PedidoIn,
+  ResultadoAnalisis, ResultadoGrilla, TablasStatus,
+} from './types';
 
 const BASE = 'http://localhost:8000/api';
 
@@ -30,6 +33,19 @@ export async function analizar(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Error al analizar');
+  }
+  return res.json();
+}
+
+export async function generarTurno(req: GenerarTurnoInput): Promise<ResultadoGrilla> {
+  const res = await fetch(`${BASE}/generar-turno`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Error al generar el turno');
   }
   return res.json();
 }

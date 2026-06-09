@@ -288,26 +288,46 @@ class MotorTurnos:
 
 
     def _indexar_periodicos(self):
-        """Índice: (agrupador, grilla_tuple) -> codigo de periodico.
-        La grilla de un periodico de 1 semana es la tupla de sus 7 dias."""
+        """Construye dos índices de periódicos:
+        - _idx_periodico      : (agr, grilla_7) -> [cod]     — solo 1 semana (compat existente)
+        - _idx_periodico_multi: (agr, (sem1, sem2, ...)) -> [cod] — todas las periodicidades
+        """
         daycols = ['Plan hor.tbjo.diario', 'Plan hor.tbjo.diario.1', 'Plan hor.tbjo.diario.2',
                    'Plan hor.tbjo.diario.3', 'Plan hor.tbjo.diario.4', 'Plan hor.tbjo.diario.5',
                    'Plan hor.tbjo.diario.6']
         self._daycols = daycols
         self._idx_periodico = {}
-        # max semanas por periodico
-        maxsem = self.periodicos.groupby('PHT por períodos')['Número de semana'].max()
-        for cod, n in maxsem.items():
-            if n != 1:
-                continue  # por ahora indexamos solo los de 1 semana (los que pide RRHH)
-            fila = self.periodicos[(self.periodicos['PHT por períodos'] == cod) &
-                                   (self.periodicos['Número de semana'] == 1)]
-            if fila.empty:
+        self._idx_periodico_multi = {}
+
+        # Agrupar todas las filas por código de periódico
+        from collections import defaultdict
+        sems_por_cod: dict = defaultdict(dict)
+        for _, r in self.periodicos.iterrows():
+            cod = r['PHT por períodos']
+            try:
+                num_sem = int(r['Número de semana'])
+            except (ValueError, TypeError):
                 continue
-            r = fila.iloc[0]
+            if num_sem in sems_por_cod[cod]:
+                continue  # duplicado de semana en el export: ignorar filas extra
             agr = r['Agrup.para PHTD']
             grilla = tuple(str(r[c]).strip() for c in daycols)
-            self._idx_periodico.setdefault((agr, grilla), []).append(cod)
+            sems_por_cod[cod][num_sem] = (agr, grilla)
+
+        for cod, sems in sems_por_cod.items():
+            if not sems:
+                continue
+            n_max = max(sems.keys())
+            # Indexar solo si el periódico tiene todas las semanas de 1 a n_max (sin huecos)
+            if not all(i in sems for i in range(1, n_max + 1)):
+                continue
+            agr = sems[1][0]
+            all_grillas = tuple(sems[i][1] for i in range(1, n_max + 1))
+            # Índice multi (cubre 1 y N semanas)
+            self._idx_periodico_multi.setdefault((agr, all_grillas), []).append(cod)
+            # Índice 1-semana (compatibilidad con buscar_periodico existente)
+            if n_max == 1:
+                self._idx_periodico.setdefault((agr, all_grillas[0]), []).append(cod)
 
     def construir_grilla(self, codigo_diario: str, dias_trabaja: list, codigo_franco='LIBR') -> tuple:
         """Arma la grilla 7-dias: el diario en los dias que trabaja, franco en el resto."""
@@ -322,6 +342,24 @@ class MotorTurnos:
         if len(codigos) > 1:
             res.duplicado = True
             res.notas.append(f'DUPLICADO: {len(codigos)} periodicos con la misma grilla: ' + ', '.join(codigos))
+        return res
+
+    def buscar_periodico_multi(self, agrupador: int, semanas: list) -> ResultadoBusqueda:
+        """Busca un periódico de N semanas.
+        semanas: lista de N tuplas de 7 códigos (LIBR para francos).
+        Funciona para 1 semana y para ciclos multisemana."""
+        if not hasattr(self, '_idx_periodico_multi'):
+            self._indexar_periodicos()
+        key = (agrupador, tuple(tuple(s) for s in semanas))
+        codigos = self._idx_periodico_multi.get(key, [])
+        res = ResultadoBusqueda(existe=len(codigos) > 0,
+                                codigos=[(c, '', None) for c in codigos])
+        if len(codigos) > 1:
+            res.duplicado = True
+            res.notas.append(
+                f'DUPLICADO: {len(codigos)} periódicos con la misma grilla: '
+                + ', '.join(codigos)
+            )
         return res
 
 

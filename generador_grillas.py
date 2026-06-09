@@ -200,19 +200,21 @@ def generar_multihorario(detalle_horario: str, dias_franco: list) -> Grilla:
 
 # ---------------------------------------------------------------------------
 # Generador ROTATIVO multisemana (caso ROCA TPTE 26)
-# Patrón verificado: el franco es una "bisagra". En cada semana, a la DERECHA
-# del franco va el horario propio de esa semana; a la IZQUIERDA, el de la otra.
-# El franco se corre un día por cada variante (LUNES, MARTES, ...).
+# Patrón verificado contra datos reales: el franco es una "bisagra".
+# En cada semana i, los días DESPUÉS del franco usan horarios_semana[i];
+# los días ANTES del franco usan horarios_semana[i-1] (wraparound).
+# Ejemplo verificado (franco MARTES):
+#   Sem1: [H_{i-1}, LIBR, H_i, H_i, H_i, H_i, H_i]
+#   Sem2: [H_i,     LIBR, H_{i+1}, ...]
 # ---------------------------------------------------------------------------
 def generar_rotativo(horarios_semana: list, dia_franco: str) -> Grilla:
     """
     horarios_semana: lista de rangos canónicos, uno por semana del ciclo.
-        ej. ['11:00-19:00', '03:00-11:00']  (SEM1 tarde, SEM2 mañana)
-    dia_franco: nombre del día de franco, ej. 'LUNES'
+        ej. ['07:00-13:00', '13:00-21:00']
+    dia_franco: nombre del día de franco, ej. 'Martes'
 
-    Aplica la bisagra: en la semana i, los días DESPUÉS del franco usan el
-    horario de la semana i; los días ANTES del franco usan el de la semana
-    anterior del ciclo (i-1, con wraparound).
+    Bisagra: días DESPUÉS del franco → horarios_semana[i] (propio de esta semana).
+             días ANTES del franco  → horarios_semana[i-1] (semana anterior, wraparound).
     """
     g = Grilla()
     n = len(horarios_semana)
@@ -227,15 +229,13 @@ def generar_rotativo(horarios_semana: list, dia_franco: str) -> Grilla:
     for i in range(n):
         semana = []
         horario_propio = horarios_semana[i]
-        horario_previo = horarios_semana[(i - 1) % n]   # el de la semana anterior del ciclo
+        horario_previo = horarios_semana[(i - 1) % n]
         for d in range(7):
             if d == f:
                 semana.append(Celda(es_franco=True))
             elif d > f:
-                # después del franco: horario propio de esta semana
                 semana.append(Celda(horario=horario_propio))
             else:
-                # antes del franco: todavía arrastra el horario de la semana previa
                 semana.append(Celda(horario=horario_previo))
         g.semanas.append(semana)
     return g

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import TablasLoader from './components/TablasLoader';
 import PedidoForm from './components/PedidoForm';
+import GeneradorGrilla from './components/GeneradorGrilla';
 import ResultadoCard from './components/ResultadoCard';
 import type { TablasState, ResultadoAnalisis } from './types';
 import { formatLoadTime, formatElapsed } from './utils';
@@ -129,6 +130,12 @@ export default function App() {
             onError={(msg) => setStatus(`Error: ${msg}`, 'error')}
             onGoToTablas={() => setTab('tablas')}
           />
+          <div style={{ marginTop: 16 }}>
+            <GeneradorGrilla
+              tablasState={tablas}
+              onError={(msg) => setStatus(`Error: ${msg}`, 'error')}
+            />
+          </div>
         </div>
 
         <div style={{ display: tab === 'resultados' ? 'block' : 'none' }}>

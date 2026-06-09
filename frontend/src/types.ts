@@ -85,6 +85,69 @@ export interface Tolerancia {
   fin_tolerancia: string;
 }
 
+export interface GenerarTurnoInput {
+  tipo: 'franco_corrido' | 'multihorario' | 'rotativo';
+  agrupador: number;
+  codigo_turno: string;
+  indice_variante?: number;
+  es_flex?: boolean;
+  detalle_horario?: string;
+  dias_franco?: string[];
+  horarios_semana?: string[];
+  dia_franco?: string;
+}
+
+export interface DiarioResuelto {
+  accion: 'existe' | 'crear' | 'sin_motor';
+  codigo?: string;
+  codigo_propuesto?: string;
+  familia?: string;
+  duplicado?: boolean;
+  todos?: DiarioDetalle[];
+  notas?: string[];
+  detalle?: CorrelativoDetalle;
+}
+
+export interface AccionDiarioGrilla {
+  tipo: 'crear_diario';
+  horario: string;
+  codigo_propuesto: string;
+  detalle: CorrelativoDetalle;
+}
+
+export interface FechaReferencia {
+  fecha_referencia: string;
+  punto_arranque: number;
+  dia_semana: string;
+  offset_dias: number;
+}
+
+export interface ResultadoGrilla {
+  codigo_turno: string;
+  agrupador: number;
+  n_semanas: number;
+  semanas_codigos: string[][];
+  dias: string[];
+  diarios: Record<string, DiarioResuelto>;
+  acciones_diario: AccionDiarioGrilla[];
+  periodico: {
+    accion: 'existe' | 'crear' | 'pendiente' | 'sin_motor';
+    codigo?: string;
+    codigo_propuesto?: string;
+    todos?: string[];
+    duplicado?: boolean;
+    familia?: string;
+    detalle?: CorrelativoDetalle;
+    nota?: string;
+    notas?: string[];
+  };
+  turno: ResultadoTurno;
+  fecha_referencia: FechaReferencia;
+  hay_revisar: boolean;
+  notas: string[];
+  ok: boolean;
+}
+
 export interface PedidoCargado {
   codigo: string | null;
   descripcion: string | null;

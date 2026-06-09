@@ -9,7 +9,7 @@ import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
-from ..models.schemas import AnalisisRequest
+from ..models.schemas import AnalisisRequest, GenerarTurnoRequest
 from turnos_engine import MotorTurnos
 
 router = APIRouter()
@@ -176,3 +176,43 @@ async def cargar_pedido(
         return {"ok": True, "n_pedidos": len(pedidos), "pedidos": pedidos}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Error al leer el pedido: {exc}")
+
+
+@router.post("/generar-turno")
+async def generar_turno(req: GenerarTurnoRequest):
+    global _motor
+    if _motor is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Primero cargá los 3 Excels de SAP en la pantalla de Carga de Tablas.",
+        )
+    try:
+        from generador_grillas import (
+            generar_franco_corrido, generar_multihorario, generar_rotativo,
+        )
+        from puente_grilla_motor import resolver_grilla
+
+        if req.tipo == 'franco_corrido':
+            if not req.detalle_horario:
+                raise HTTPException(400, detail="franco_corrido requiere detalle_horario.")
+            grilla = generar_franco_corrido(req.detalle_horario, req.dias_franco or [])
+        elif req.tipo == 'multihorario':
+            if not req.detalle_horario:
+                raise HTTPException(400, detail="multihorario requiere detalle_horario.")
+            grilla = generar_multihorario(req.detalle_horario, req.dias_franco or [])
+        elif req.tipo == 'rotativo':
+            if not req.horarios_semana or not req.dia_franco:
+                raise HTTPException(400, detail="rotativo requiere horarios_semana y dia_franco.")
+            grilla = generar_rotativo(req.horarios_semana, req.dia_franco)
+        else:
+            raise HTTPException(400, detail=f"Tipo de turno desconocido: '{req.tipo}'.")
+
+        resultado = resolver_grilla(
+            grilla, req.agrupador, req.codigo_turno,
+            req.indice_variante, _motor, req.es_flex,
+        )
+        return JSONResponse(content=_sanitize(resultado))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Error al generar el turno: {exc}")
