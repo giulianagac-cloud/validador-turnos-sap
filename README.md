@@ -25,6 +25,25 @@ npm run dev
 
 Disponible en: http://localhost:5173
 
+## Levantar en modo unificado (una sola terminal)
+
+Compila el frontend y deja que el backend lo sirva en la misma URL. Es la forma
+recomendada para uso normal (no desarrollo).
+
+```bash
+# 1. Compilar el frontend (genera frontend/dist/)
+cd frontend && npm run build
+
+# 2. Desde la raíz del proyecto, levantar el backend (sin --reload)
+cd ..
+python -m uvicorn backend.main:app
+```
+
+Abrir: http://localhost:8000 — la app completa se sirve desde ahí.
+
+> El modo desarrollo (dos terminales: `uvicorn --reload` + `npm run dev` en :5173)
+> sigue funcionando igual; en dev, Vite redirige las llamadas `/api` al backend.
+
 ## Seguridad
 
 1. **Sin persistencia de datos de empleados**: los archivos Excel se procesan

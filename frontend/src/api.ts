@@ -3,7 +3,10 @@ import type {
   ResultadoAnalisis, ResultadoGrilla, TablasStatus,
 } from './types';
 
-const BASE = 'http://localhost:8000/api';
+// Ruta relativa por defecto: funciona servido desde el backend (mismo origen).
+// En `npm run dev` (5173) el proxy de Vite redirige /api → localhost:8000.
+// Se puede sobrescribir con VITE_API_BASE si hiciera falta.
+const BASE = `${import.meta.env.VITE_API_BASE ?? ''}/api`;
 
 export async function cargarTablas(
   diarios: File,
