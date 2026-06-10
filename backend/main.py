@@ -1,15 +1,16 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .paths import frontend_dist
 from .routers import analizar
 
-# frontend/dist relativo a la raíz del repo (backend/main.py -> raíz)
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+# Ruta al frontend compilado. El helper resuelve el caso congelado (.exe ->
+# sys._MEIPASS) y el de desarrollo (árbol del proyecto).
+FRONTEND_DIST = frontend_dist()
 
 
 @asynccontextmanager

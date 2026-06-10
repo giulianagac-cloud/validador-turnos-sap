@@ -1,7 +1,6 @@
 import io
 import json
 import math
-import pathlib
 import re
 import unicodedata
 from datetime import datetime
@@ -13,15 +12,18 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..models.schemas import AnalisisRequest, GenerarTurnoRequest
+from ..paths import data_dir
 from turnos_engine import MotorTurnos
 
 router = APIRouter()
 _motor: Optional[MotorTurnos] = None
 
 # ---------------------------------------------------------------------------
-# Persistencia local en data_local/ (nunca se sube al repo)
+# Persistencia local en Documentos/ValidadorTurnos (nunca se sube al repo).
+# Va a Documentos para que funcione igual como .exe (donde el dir del programa
+# puede ser de solo lectura) y en desarrollo.
 # ---------------------------------------------------------------------------
-_DATA_DIR = pathlib.Path(__file__).parent.parent.parent / 'data_local'
+_DATA_DIR = data_dir()
 _FILE_DIARIOS = _DATA_DIR / 'diarios.bin'
 _FILE_PERIODICOS = _DATA_DIR / 'periodicos.bin'
 _FILE_TURNOS = _DATA_DIR / 'turnos.bin'

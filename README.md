@@ -44,6 +44,41 @@ Abrir: http://localhost:8000 — la app completa se sirve desde ahí.
 > El modo desarrollo (dos terminales: `uvicorn --reload` + `npm run dev` en :5173)
 > sigue funcionando igual; en dev, Vite redirige las llamadas `/api` al backend.
 
+## Generar el ejecutable (.exe)
+
+Empaqueta todo (backend + frontend compilado + dependencias) en un único `.exe`
+que se usa sin tener Python instalado. La usuaria solo hace doble clic.
+
+```bash
+# 1. Compilar el frontend (genera frontend/dist/, que se embebe en el .exe)
+cd frontend && npm run build && cd ..
+
+# 2. Instalar PyInstaller (una sola vez)
+pip install pyinstaller
+
+# 3. Empaquetar usando el .spec del repo
+python -m pyinstaller validador.spec --noconfirm
+```
+
+El ejecutable queda en `dist/ValidadorTurnos.exe`.
+
+**Uso:** doble clic en `ValidadorTurnos.exe`. Abre una ventana de consola (muestra
+la URL y sirve para cerrar la app) y automáticamente abre el navegador en
+`http://localhost:8000`. Si el 8000 está ocupado, usa otro puerto libre y abre el
+navegador en ese. La primera vez tarda unos segundos en arrancar (descomprime).
+
+> **onefile vs onedir:** el `.spec` está en modo **onefile** (un solo `.exe`,
+> ideal para repartir por mail o pendrive). A cambio, el arranque es algo más lento
+> porque descomprime a una carpeta temporal en cada ejecución. Si se prefiere
+> arranque más rápido a costa de distribuir una carpeta entera, se puede pasar a
+> **onedir** (separando `EXE`/`COLLECT` en el `.spec`).
+
+### Dónde guarda los datos
+
+Las tablas SAP cargadas se persisten en **`Documentos\ValidadorTurnos\`** del usuario
+actual (no junto al `.exe`, que puede estar en una carpeta de solo lectura). La
+carpeta se crea sola. Esto aplica tanto al `.exe` como al modo desarrollo.
+
 ## Seguridad
 
 1. **Sin persistencia de datos de empleados**: los archivos Excel se procesan
