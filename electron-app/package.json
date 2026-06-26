@@ -1,0 +1,39 @@
+{
+  "name": "validador-turnos",
+  "version": "1.0.0",
+  "description": "Validador de Turnos SAP HCM — Trenes Argentinos",
+  "author": "Trenes Argentinos",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "ar.trenes.validadorturnos",
+    "productName": "Validador de Turnos SAP HCM",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowDirChange": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerLanguages": ["Spanish"]
+    },
+    "extraResources": [
+      {
+        "from": "../dist/ValidadorTurnos.exe",
+        "to": "ValidadorTurnos.exe"
+      }
+    ],
+    "directories": {
+      "output": "dist-electron"
+    }
+  }
+}

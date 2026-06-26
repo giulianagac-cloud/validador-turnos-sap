@@ -10,7 +10,9 @@ Se usa tanto congelado por PyInstaller (doble clic) como en desarrollo
 `uvicorn backend.main:app --reload` aparte.
 """
 
+import os
 import socket
+import tempfile
 import threading
 import time
 import webbrowser
@@ -20,6 +22,10 @@ import uvicorn
 from backend.main import app
 
 PUERTO_PREFERIDO = 8000
+
+# Archivo temporal donde se escribe el puerto elegido para que el wrapper
+# Electron pueda descubrirlo (los pipes de stdout no se heredan en onefile).
+PORT_FILE = os.path.join(tempfile.gettempdir(), "validador_turnos_port.txt")
 
 
 def _puerto_libre(preferido: int = PUERTO_PREFERIDO) -> int:
@@ -48,13 +54,20 @@ def main() -> None:
     puerto = _puerto_libre()
     url = f"http://localhost:{puerto}"
 
+    try:
+        with open(PORT_FILE, "w") as f:
+            f.write(str(puerto))
+    except Exception:
+        pass  # Si falla, el proceso sigue igual; Electron tiene su propio timeout
+
     print("=" * 60)
     print("  Validador de Turnos SAP HCM — Trenes Argentinos")
     print(f"  Abriendo la app en: {url}")
     print("  (para cerrar, cerrá esta ventana)")
     print("=" * 60)
 
-    threading.Thread(target=_abrir_navegador, args=(url,), daemon=True).start()
+    if not os.environ.get("VALIDADOR_NO_BROWSER"):
+        threading.Thread(target=_abrir_navegador, args=(url,), daemon=True).start()
 
     uvicorn.run(app, host="127.0.0.1", port=puerto, log_level="info")
 

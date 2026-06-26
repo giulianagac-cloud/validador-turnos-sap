@@ -23,6 +23,9 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 
+# Electron — artefactos de build
+electron-app/dist-electron/
+
 # PyInstaller — salida del empaquetado del .exe (build/ y dist/ ya cubiertos
 # arriba). El .spec SÍ se versiona (es la config de build, hecha a mano).
 *.manifest
