@@ -33,6 +33,36 @@ export default function ResultadoCard({ resultado: r }: Props) {
     );
   };
 
+  const copiarDatosSap = () => {
+    if (!r.ok) return;
+    const lineas = [
+      `Regla p.plan h.tbjo.: ${r.pedido.codigo}`,
+      `Texto: ${r.pedido.descripcion || ''}`,
+      `Agrup.para PHTD: ${r.pedido.agrupador} (${r.pedido.linea})`,
+      '',
+      'Horario de trabajo:',
+      `Hrs.trabajo por día: ${r.horario.horas_diarias_calc}`,
+      `H tbjo.p/semana: ${r.horario.horas_sem_calc}`,
+      `Hrs.trabajo por mes: ${r.validaciones.horas_men?.calculado ?? ''}`,
+      `Días laborales sem.: ${r.horario.dias_trabaja.length}`,
+    ];
+    if (r.periodico.accion === 'crear') {
+      lineas.push(
+        '',
+        'Generación plan horario trabajo:',
+        `PHT por períodos: ${r.periodico.codigo_propuesto}`,
+        `Fe.referencia PHTP: ${r.periodico.fecha_referencia ?? ''}`,
+        `Pto.arranque en PHTP: ${r.periodico.punto_arranque != null ? String(r.periodico.punto_arranque).padStart(3, '0') : ''}`,
+        `Regla tipos de día: ${r.horario.fsi === true ? '02' : r.horario.fsi === false ? '01' : ''}`,
+        `Agrup.para PHTD: ${r.pedido.agrupador}`,
+      );
+    }
+    navigator.clipboard.writeText(lineas.join('\n')).then(
+      () => alert('Datos para SAP copiados al portapapeles.'),
+      () => alert('No se pudo acceder al portapapeles.'),
+    );
+  };
+
   return (
     <div className="sap-panel" style={{ marginBottom: 12 }}>
       {/* Header */}
@@ -222,11 +252,95 @@ export default function ResultadoCard({ resultado: r }: Props) {
 
             {/* Correlativo de Turno + Horario Parseado — juntos en un solo cuadro */}
             <div className="result-section">
-              <div className="result-section-title">Correlativo de Turno (Regla)</div>
+              <div className="result-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Correlativo de Turno (Regla)</span>
+                <button
+                  className="sap-btn"
+                  style={{ fontSize: 11, padding: '1px 8px', minWidth: 'auto' }}
+                  onClick={copiarDatosSap}
+                  title="Copiar todos los datos para completar en SAP"
+                >
+                  &#128203; Copiar
+                </button>
+              </div>
               <div>
                 <span className={sem.cls}>{sem.label}</span>
               </div>
               <div style={{ fontSize: 12, marginTop: 2 }}>{r.turno.nota}</div>
+
+              <div style={{ fontSize: 12, marginTop: 6, color: '#333' }}>
+                <div><strong>{r.pedido.descripcion || r.pedido.codigo}</strong></div>
+                <div style={{ color: '#555' }}>Agrupador: {r.pedido.agrupador} &middot; {r.pedido.linea}</div>
+              </div>
+
+              <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #C5C2BB' }}>
+                <div style={{ fontWeight: 'bold', fontSize: 11, textTransform: 'uppercase', color: '#444', letterSpacing: 0.3, marginBottom: 4 }}>
+                  Horario de Trabajo
+                </div>
+                <table style={{ fontSize: 12, borderCollapse: 'collapse', lineHeight: 1.6 }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ color: '#555', paddingRight: 8 }}>Hrs.trabajo por día:</td>
+                      <td><strong>{r.horario.horas_diarias_calc}</strong></td>
+                    </tr>
+                    <tr>
+                      <td style={{ color: '#555' }}>H tbjo.p/semana:</td>
+                      <td><strong>{r.horario.horas_sem_calc}</strong></td>
+                    </tr>
+                    <tr>
+                      <td style={{ color: '#555' }}>Hrs.trabajo por mes:</td>
+                      <td><strong>{r.validaciones.horas_men?.calculado ?? '—'}</strong></td>
+                    </tr>
+                    <tr>
+                      <td style={{ color: '#555' }}>Días laborales sem.:</td>
+                      <td><strong>{r.horario.dias_trabaja.length}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {r.periodico.accion === 'crear' && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #C5C2BB' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: 11, textTransform: 'uppercase', color: '#444', letterSpacing: 0.3, marginBottom: 4 }}>
+                    Datos a completar — Generación Plan Horario Trabajo
+                  </div>
+                  <table style={{ fontSize: 12, borderCollapse: 'collapse', lineHeight: 1.6 }}>
+                    <tbody>
+                      <tr>
+                        <td style={{ color: '#555', paddingRight: 8 }}>PHT por períodos:</td>
+                        <td><strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo_propuesto}</strong></td>
+                      </tr>
+                      <tr>
+                        <td style={{ color: '#555' }}>Fe.referencia PHTP:</td>
+                        <td><strong style={{ fontFamily: 'monospace' }}>{r.periodico.fecha_referencia ?? '—'}</strong></td>
+                      </tr>
+                      <tr>
+                        <td style={{ color: '#555' }}>Pto.arranque en PHTP:</td>
+                        <td>
+                          <strong style={{ fontFamily: 'monospace' }}>
+                            {r.periodico.punto_arranque != null ? String(r.periodico.punto_arranque).padStart(3, '0') : '—'}
+                          </strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ color: '#555' }}>Regla tipos de día:</td>
+                        <td>
+                          <strong style={{ fontFamily: 'monospace' }}>
+                            {r.horario.fsi === true ? '02' : r.horario.fsi === false ? '01' : '—'}
+                          </strong>
+                          <span style={{ color: '#888', fontSize: 11, marginLeft: 6 }}>
+                            ({r.horario.fsi === true ? 'feriado' : r.horario.fsi === false ? 'no feriado laboral' : '?'})
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ color: '#555' }}>Agrup.para PHTD:</td>
+                        <td><strong style={{ fontFamily: 'monospace' }}>{r.pedido.agrupador}</strong></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="result-section-title" style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #C5C2BB' }}>
                 Horario Parseado

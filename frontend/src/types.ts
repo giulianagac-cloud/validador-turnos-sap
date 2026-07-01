@@ -83,6 +83,8 @@ export interface ResultadoPeriodico {
   codigo_propuesto?: string;
   familia?: string;
   detalle?: CorrelativoDetalle;
+  fecha_referencia?: string;
+  punto_arranque?: number;
 }
 
 export interface Cuadrito {

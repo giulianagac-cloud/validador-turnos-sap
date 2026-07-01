@@ -124,6 +124,18 @@ async def analizar(req: AnalisisRequest):
         for p in req.pedidos
     ]
     resultados = _motor.analizar_lote(pedidos_dicts)
+
+    # Datos para completar en SAP al crear el periódico (Fe.referencia PHTP /
+    # Pto.arranque en PHTP): mismo cálculo que ya usa el Generador de Grilla,
+    # acá para el caso simple (1 semana, sin rotación -> variante base "A").
+    from generador_grillas import calcular_fecha_referencia
+    for r in resultados:
+        periodico = r.get('periodico') or {}
+        if periodico.get('accion') == 'crear':
+            ref = calcular_fecha_referencia(0)
+            periodico['fecha_referencia'] = ref['fecha_referencia']
+            periodico['punto_arranque'] = ref['punto_arranque']
+
     return JSONResponse(content={"resultados": [_sanitize(r) for r in resultados]})
 
 
