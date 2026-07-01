@@ -378,12 +378,17 @@ class MotorTurnos:
     # Los huecos se informan solo como dato.
     # -----------------------------------------------------------------------
     def _familias_de(self, df, col_codigo, agrupador):
-        """Agrupa los codigos de un agrupador por prefijo alfabetico -> lista de numeros."""
+        """Agrupa los codigos de un agrupador por prefijo alfabetico -> lista de numeros.
+
+        Tolera variantes con sufijo de letra (ej. "LM861-A", "LM858-AP"): el
+        numero de correlativo es el que cuenta, el sufijo es una variante
+        dentro de ese mismo numero, no avanza la numeracion por si solo.
+        """
         sub = df[df['Agrup.para PHTD'] == agrupador]
         familias = {}
         anchos = {}
         for c in sub[col_codigo].dropna().astype(str).unique():
-            mt = re.match(r'^([A-Za-z]+)(\d+)$', c.strip())
+            mt = re.match(r'^([A-Za-z]+)(\d+)(?:-[A-Za-z]+)?$', c.strip())
             if mt:
                 pref, num = mt.group(1), mt.group(2)
                 familias.setdefault(pref, set()).add(int(num))
@@ -433,7 +438,7 @@ class MotorTurnos:
     def validar_correlativo_turno(self, agrupador: int, codigo_pedido: str, reservas=None):
         """Verifica si el codigo que pide el negocio es el correlativo correcto.
         reservas: {(capa, agrupador, familia): set(ints)} — numeros ya reservados en el lote."""
-        mt = re.match(r'^([A-Za-z]+)(\d+)$', str(codigo_pedido).strip())
+        mt = re.match(r'^([A-Za-z]+)(\d+)(?:-[A-Za-z]+)?$', str(codigo_pedido).strip())
         if not mt:
             return {'estado': 'revisar', 'nota': f'No se pudo interpretar el codigo "{codigo_pedido}"'}
         pref, num = mt.group(1), int(mt.group(2))
@@ -498,7 +503,7 @@ class MotorTurnos:
         """Agrega el numero de un codigo al set de reservas del lote."""
         if not codigo:
             return
-        mt = re.match(r'^([A-Za-z]+)(\d+)$', str(codigo).strip())
+        mt = re.match(r'^([A-Za-z]+)(\d+)(?:-[A-Za-z]+)?$', str(codigo).strip())
         if mt:
             key = (capa, agrupador, mt.group(1))
             reservas.setdefault(key, set()).add(int(mt.group(2)))
