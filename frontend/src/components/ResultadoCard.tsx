@@ -227,11 +227,8 @@ export default function ResultadoCard({ resultado: r }: Props) {
               </div>
               <div style={{ fontSize: 12, marginTop: 2 }}>{r.turno.nota}</div>
             </div>
-          </div>
 
-          {/* ---- Columna derecha: contexto (horario parseado, validacion, cuadrito) ---- */}
-          <div>
-            {/* Horario parseado */}
+            {/* Horario parseado — debajo del correlativo de turno */}
             <div className="result-section">
               <div className="result-section-title">Horario Parseado</div>
               <table style={{ fontSize: 12, borderCollapse: 'collapse', lineHeight: 1.6 }}>
@@ -271,7 +268,10 @@ export default function ResultadoCard({ resultado: r }: Props) {
                 </tbody>
               </table>
             </div>
+          </div>
 
+          {/* ---- Columna derecha: contexto (validacion de horas, notas) ---- */}
+          <div>
             {/* Validacion de horas */}
             {(r.validaciones.horas_diarias || r.validaciones.horas_sem || r.validaciones.horas_men) && (
               <div className="result-section">
