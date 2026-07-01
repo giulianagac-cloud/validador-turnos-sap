@@ -74,7 +74,8 @@ class HorarioParseado:
 # Parser principal
 # ---------------------------------------------------------------------------
 _RE_HORA = re.compile(r'(\d{1,2})[:.](\d{2})')
-_RE_RANGO = re.compile(r'(\d{1,2}[:.]\d{2})\s*a\s*(\d{1,2}[:.]\d{2})')
+# "hs" opcional (con o sin espacio) pegado al primer horario, ej. "14:00hs a 21:00hs"
+_RE_RANGO = re.compile(r'(\d{1,2}[:.]\d{2})\s*(?:hs\.?)?\s*a\s*(\d{1,2}[:.]\d{2})')
 
 
 def _to_min(hhmm: str) -> int:
@@ -132,10 +133,11 @@ def parse_horario(texto: str) -> HorarioParseado:
 
 
 def _parse_dias(pre: str, res: HorarioParseado) -> set:
-    """Detecta rango de dias tipo 'l a v', 'lunes a domingo', 'mi a d'."""
+    """Detecta rango de dias tipo 'l a v', 'lunes a domingo', 'mi a d', y también
+    la forma pegada sin espacios 'lav', 'dav', 'miad'."""
     pre = pre.strip()
-    # rango "X a Y"
-    rng = re.search(r'\b([a-z]+)\s+a\s+([a-z]+)\b', pre)
+    # rango "X a Y" (espacios opcionales alrededor de la "a", tolera forma pegada)
+    rng = re.search(r'\b([a-z]+)\s*a\s*([a-z]+)\b', pre)
     if rng:
         d1, d2 = _dia_idx(rng.group(1)), _dia_idx(rng.group(2))
         if d1 is not None and d2 is not None:
@@ -304,6 +306,8 @@ class MotorTurnos:
         sems_por_cod: dict = defaultdict(dict)
         for _, r in self.periodicos.iterrows():
             cod = r['PHT por períodos']
+            if pd.isna(cod):
+                continue  # fila vacía/basura en el export: no es un periodico real
             try:
                 num_sem = int(r['Número de semana'])
             except (ValueError, TypeError):
