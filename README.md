@@ -79,6 +79,50 @@ Las tablas SAP cargadas se persisten en **`Documentos\ValidadorTurnos\`** del us
 actual (no junto al `.exe`, que puede estar en una carpeta de solo lectura). La
 carpeta se crea sola. Esto aplica tanto al `.exe` como al modo desarrollo.
 
+## Etapa 3 — App de escritorio (Electron)
+
+Envuelve `dist/ValidadorTurnos.exe` en una ventana de aplicación nativa (sin consola
+visible, sin necesidad de un navegador externo) y genera un instalador de Windows.
+
+**Arquitectura:** Electron lanza `ValidadorTurnos.exe` como proceso hijo oculto (sin
+consola visible), lee el puerto elegido de un archivo temporal que el backend escribe
+al arrancar, espera que `/api/estado-tablas` responda y entonces carga la URL en un
+`BrowserWindow`. Al cerrar la ventana, mata el proceso del backend limpiamente.
+
+### Prerrequisitos
+
+- `dist/ValidadorTurnos.exe` ya generado (ver sección "Generar el ejecutable" arriba).
+- Node.js 18+ instalado (ya disponible si seguiste los pasos de frontend).
+
+### Modo desarrollo (probar sin instalar)
+
+```bash
+cd electron-app
+npm install        # primera vez
+npm run dev
+```
+
+Abre la ventana de Electron directamente contra el backend ya compilado.
+Si querés recompilar el backend antes: `python -m pyinstaller validador.spec --noconfirm`.
+
+### Generar el instalador de Windows
+
+```bash
+cd electron-app
+npm run build
+```
+
+El instalador queda en `electron-app/dist-electron/` (algo como
+`Validador de Turnos SAP HCM Setup 1.0.0.exe`). Incluye `ValidadorTurnos.exe`
+embebido, así que el usuario final solo necesita ese único instalador. Crea accesos
+directos en el menú inicio y en el escritorio.
+
+### Agregar ícono personalizado
+
+Colocá un archivo `electron-app/assets/icon.ico` (256×256 recomendado). Luego
+descomentá la línea `icon:` en `electron-app/main.js` y agregá `"icon": "assets/icon.ico"`
+dentro de `"win": { ... }` en `electron-app/package.json`.
+
 ## Despliegue en Vercel (solución transitoria de equipo)
 
 Mientras se gestiona un servidor interno de Trenes Argentinos, la app se puede
