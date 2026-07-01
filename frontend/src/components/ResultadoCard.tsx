@@ -61,8 +61,111 @@ export default function ResultadoCard({ resultado: r }: Props) {
 
       {r.ok && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
-          {/* ---- Columna izquierda ---- */}
+          {/* ---- Columna izquierda: las 3 resoluciones, en orden diario -> periodico -> turno ---- */}
           <div>
+            {/* Diario */}
+            {r.diario.accion && (
+              <div className="result-section">
+                <div className="result-section-title">Diario (PHTD)</div>
+                {r.diario.accion === 'existe' ? (
+                  <div style={{ fontSize: 12 }}>
+                    <span className="semaphore-ok">&#10003; Existe:</span>{' '}
+                    <strong style={{ fontFamily: 'monospace' }}>{r.diario.codigo}</strong>
+                    {r.diario.duplicado && r.diario.todos && (
+                      <div style={{ marginTop: 6 }}>
+                        <span className="semaphore-warn">
+                          &#9888; {r.diario.todos.length} códigos para este horario — elegir uno:
+                        </span>
+                        <table className="alv-table" style={{ marginTop: 4 }}>
+                          <thead>
+                            <tr><th>Código</th><th>Texto SAP</th><th>Horas</th></tr>
+                          </thead>
+                          <tbody>
+                            {r.diario.todos.map((d, i) => (
+                              <tr key={i}>
+                                <td style={{ fontFamily: 'monospace' }}>{d.codigo}</td>
+                                <td>{d.texto}</td>
+                                <td style={{ textAlign: 'right' }}>{d.horas}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12 }}>
+                    <span className="semaphore-warn">&#10133; Crear:</span>{' '}
+                    <strong style={{ fontFamily: 'monospace' }}>{r.diario.codigo_propuesto}</strong>
+                    {r.tolerancia?.inicio_teorico && (
+                      <span style={{ color: '#444' }}>
+                        {' '}({r.tolerancia.inicio_teorico} a {r.tolerancia.final_teorico},{' '}
+                        {r.horario.horas_diarias_calc}h)
+                      </span>
+                    )}
+                    <span style={{ color: '#666', marginLeft: 4 }}>(familia {r.diario.familia})</span>
+                    {r.diario.detalle?.nota && (
+                      <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
+                        {r.diario.detalle.nota}
+                      </div>
+                    )}
+                    {r.tolerancia?.inicio_teorico && (
+                      <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '3px solid #BDB9B3', fontSize: 11, color: '#333', lineHeight: 1.9 }}>
+                        <div>
+                          <span style={{ color: '#666', display: 'inline-block', minWidth: 100 }}>Tol. entrada:</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.inicio_tolerancia}</strong>
+                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
+                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 4px', fontFamily: 'monospace' }}>
+                            [{r.tolerancia.inicio_teorico}]
+                          </span>
+                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.inicio_tolerancia_fin}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#666', display: 'inline-block', minWidth: 100 }}>Tol. salida:</span>
+                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 4px', fontFamily: 'monospace' }}>
+                            [{r.tolerancia.final_teorico}]
+                          </span>
+                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.fin_tolerancia}</strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {r.diario.notas?.map((n, i) => (
+                  <div key={i} style={{ fontSize: 11, color: '#CC6600', marginTop: 2 }}>! {n}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Periodico */}
+            {r.periodico.accion && (
+              <div className="result-section">
+                <div className="result-section-title">Periódico (PHT por períodos)</div>
+                {r.periodico.accion === 'existe' ? (
+                  <div style={{ fontSize: 12 }}>
+                    <span className="semaphore-ok">&#10003; Existe:</span>{' '}
+                    <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo}</strong>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12 }}>
+                    <span className="semaphore-warn">&#10133; Crear:</span>{' '}
+                    <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo_propuesto}</strong>{' '}
+                    <span style={{ color: '#666' }}>(familia {r.periodico.familia})</span>
+                    {r.periodico.detalle?.nota && (
+                      <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
+                        {r.periodico.detalle.nota}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {r.periodico.notas?.map((n, i) => (
+                  <div key={i} style={{ fontSize: 11, color: '#CC6600', marginTop: 2 }}>! {n}</div>
+                ))}
+              </div>
+            )}
+
             {/* Correlativo turno */}
             <div className="result-section">
               <div className="result-section-title">Correlativo de Turno (Regla)</div>
@@ -71,7 +174,10 @@ export default function ResultadoCard({ resultado: r }: Props) {
               </div>
               <div style={{ fontSize: 12, marginTop: 2 }}>{r.turno.nota}</div>
             </div>
+          </div>
 
+          {/* ---- Columna derecha: contexto (horario parseado, validacion, cuadrito) ---- */}
+          <div>
             {/* Horario parseado */}
             <div className="result-section">
               <div className="result-section-title">Horario Parseado</div>
@@ -169,113 +275,6 @@ export default function ResultadoCard({ resultado: r }: Props) {
                     )}
                   </tbody>
                 </table>
-              </div>
-            )}
-
-            {/* Diario */}
-            {r.diario.accion && (
-              <div className="result-section">
-                <div className="result-section-title">Diario (PHTD)</div>
-                {r.diario.accion === 'existe' ? (
-                  <div style={{ fontSize: 12 }}>
-                    <span className="semaphore-ok">&#10003; Existe:</span>{' '}
-                    <strong style={{ fontFamily: 'monospace' }}>{r.diario.codigo}</strong>
-                    {r.diario.duplicado && r.diario.todos && (
-                      <div style={{ marginTop: 6 }}>
-                        <span className="semaphore-warn">
-                          &#9888; {r.diario.todos.length} códigos para este horario — elegir uno:
-                        </span>
-                        <table className="alv-table" style={{ marginTop: 4 }}>
-                          <thead>
-                            <tr><th>Código</th><th>Texto SAP</th><th>Horas</th></tr>
-                          </thead>
-                          <tbody>
-                            {r.diario.todos.map((d, i) => (
-                              <tr key={i}>
-                                <td style={{ fontFamily: 'monospace' }}>{d.codigo}</td>
-                                <td>{d.texto}</td>
-                                <td style={{ textAlign: 'right' }}>{d.horas}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12 }}>
-                    <span className="semaphore-warn">&#10133; Crear:</span>{' '}
-                    <strong style={{ fontFamily: 'monospace' }}>{r.diario.codigo_propuesto}</strong>
-                    {r.tolerancia?.inicio_teorico && (
-                      <span style={{ color: '#444' }}>
-                        {' '}({r.tolerancia.inicio_teorico} a {r.tolerancia.final_teorico},{' '}
-                        {r.horario.horas_diarias_calc}h)
-                      </span>
-                    )}
-                    <span style={{ color: '#666', marginLeft: 4 }}>(familia {r.diario.familia})</span>
-                    {r.diario.detalle?.nota && (
-                      <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
-                        {r.diario.detalle.nota}
-                      </div>
-                    )}
-                    {r.tolerancia?.inicio_teorico && (
-                      <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '3px solid #BDB9B3', fontSize: 11, color: '#333', lineHeight: 1.9 }}>
-                        <div>
-                          <span style={{ color: '#666', display: 'inline-block', minWidth: 100 }}>Tol. entrada:</span>
-                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.inicio_tolerancia}</strong>
-                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
-                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 4px', fontFamily: 'monospace' }}>
-                            [{r.tolerancia.inicio_teorico}]
-                          </span>
-                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
-                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.inicio_tolerancia_fin}</strong>
-                        </div>
-                        <div>
-                          <span style={{ color: '#666', display: 'inline-block', minWidth: 100 }}>Tol. salida:</span>
-                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 4px', fontFamily: 'monospace' }}>
-                            [{r.tolerancia.final_teorico}]
-                          </span>
-                          <span style={{ color: '#AAA', margin: '0 5px' }}>→</span>
-                          <strong style={{ fontFamily: 'monospace' }}>{r.tolerancia.fin_tolerancia}</strong>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {r.diario.notas?.map((n, i) => (
-                  <div key={i} style={{ fontSize: 11, color: '#CC6600', marginTop: 2 }}>! {n}</div>
-                ))}
-              </div>
-            )}
-
-          </div>
-
-          {/* ---- Columna derecha ---- */}
-          <div>
-            {/* Periodico */}
-            {r.periodico.accion && (
-              <div className="result-section">
-                <div className="result-section-title">Periódico (PHT por períodos)</div>
-                {r.periodico.accion === 'existe' ? (
-                  <div style={{ fontSize: 12 }}>
-                    <span className="semaphore-ok">&#10003; Existe:</span>{' '}
-                    <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo}</strong>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12 }}>
-                    <span className="semaphore-warn">&#10133; Crear:</span>{' '}
-                    <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo_propuesto}</strong>{' '}
-                    <span style={{ color: '#666' }}>(familia {r.periodico.familia})</span>
-                    {r.periodico.detalle?.nota && (
-                      <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
-                        {r.periodico.detalle.nota}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {r.periodico.notas?.map((n, i) => (
-                  <div key={i} style={{ fontSize: 11, color: '#CC6600', marginTop: 2 }}>! {n}</div>
-                ))}
               </div>
             )}
 
