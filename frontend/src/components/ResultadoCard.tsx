@@ -166,6 +166,59 @@ export default function ResultadoCard({ resultado: r }: Props) {
               </div>
             )}
 
+            {/* Cuadrito — justo debajo del detalle del periódico */}
+            {r.cuadrito?.celdas && (
+              <div className="result-section">
+                <div className="result-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Cuadrito — Grilla 7 días (para cargar en SAP)</span>
+                  <button
+                    className="sap-btn"
+                    style={{ fontSize: 11, padding: '1px 8px', minWidth: 'auto' }}
+                    onClick={copiarCuadrito}
+                    title="Copiar al portapapeles en formato TSV (pegable en Excel)"
+                  >
+                    &#128203; Copiar
+                  </button>
+                </div>
+
+                <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>
+                  Diario utilizado: <strong style={{ fontFamily: 'monospace' }}>{r.cuadrito.codigo_diario_usado}</strong>
+                </div>
+
+                <table className="alv-table">
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'center', minWidth: 36 }}>N&#186;</th>
+                      {r.cuadrito.dias.map(d => (
+                        <th key={d} style={{ textAlign: 'center', minWidth: 52 }}>
+                          {d.slice(0, 2)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 'bold', color: '#555' }}>001</td>
+                      {r.cuadrito.celdas.map((c, i) => (
+                        <td
+                          key={i}
+                          style={{
+                            textAlign: 'center',
+                            fontFamily: 'monospace',
+                            fontWeight: c !== 'LIBR' ? 'bold' : 'normal',
+                            color: c === 'LIBR' ? '#888888' : '#000000',
+                            background: c === 'LIBR' ? '#F0EDE8' : '#FFFFFF',
+                          }}
+                        >
+                          {c}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {/* Correlativo turno */}
             <div className="result-section">
               <div className="result-section-title">Correlativo de Turno (Regla)</div>
@@ -273,59 +326,6 @@ export default function ResultadoCard({ resultado: r }: Props) {
                         </td>
                       </tr>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Cuadrito */}
-            {r.cuadrito?.celdas && (
-              <div className="result-section">
-                <div className="result-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Cuadrito — Grilla 7 días (para cargar en SAP)</span>
-                  <button
-                    className="sap-btn"
-                    style={{ fontSize: 11, padding: '1px 8px', minWidth: 'auto' }}
-                    onClick={copiarCuadrito}
-                    title="Copiar al portapapeles en formato TSV (pegable en Excel)"
-                  >
-                    &#128203; Copiar
-                  </button>
-                </div>
-
-                <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>
-                  Diario utilizado: <strong style={{ fontFamily: 'monospace' }}>{r.cuadrito.codigo_diario_usado}</strong>
-                </div>
-
-                <table className="alv-table">
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'center', minWidth: 36 }}>N&#186;</th>
-                      {r.cuadrito.dias.map(d => (
-                        <th key={d} style={{ textAlign: 'center', minWidth: 52 }}>
-                          {d.slice(0, 2)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 'bold', color: '#555' }}>001</td>
-                      {r.cuadrito.celdas.map((c, i) => (
-                        <td
-                          key={i}
-                          style={{
-                            textAlign: 'center',
-                            fontFamily: 'monospace',
-                            fontWeight: c !== 'LIBR' ? 'bold' : 'normal',
-                            color: c === 'LIBR' ? '#888888' : '#000000',
-                            background: c === 'LIBR' ? '#F0EDE8' : '#FFFFFF',
-                          }}
-                        >
-                          {c}
-                        </td>
-                      ))}
-                    </tr>
                   </tbody>
                 </table>
               </div>
