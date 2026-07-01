@@ -139,98 +139,98 @@ export default function ResultadoCard({ resultado: r }: Props) {
               </div>
             )}
 
-            {/* Periodico */}
-            {r.periodico.accion && (
-              <div className="result-section">
-                <div className="result-section-title">Periódico (PHT por períodos)</div>
-                {r.periodico.accion === 'existe' ? (
-                  <div style={{ fontSize: 12 }}>
-                    <span className="semaphore-ok">&#10003; Existe:</span>{' '}
-                    <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo}</strong>
+            {/* Periodico + Cuadrito — juntos en un solo cuadro */}
+            <div className="result-section">
+              {r.periodico.accion && (
+                <>
+                  <div className="result-section-title">Periódico (PHT por períodos)</div>
+                  {r.periodico.accion === 'existe' ? (
+                    <div style={{ fontSize: 12 }}>
+                      <span className="semaphore-ok">&#10003; Existe:</span>{' '}
+                      <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo}</strong>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12 }}>
+                      <span className="semaphore-warn">&#10133; Crear:</span>{' '}
+                      <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo_propuesto}</strong>{' '}
+                      <span style={{ color: '#666' }}>(familia {r.periodico.familia})</span>
+                      {r.periodico.detalle?.nota && (
+                        <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
+                          {r.periodico.detalle.nota}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {r.periodico.notas?.map((n, i) => (
+                    <div key={i} style={{ fontSize: 11, color: '#CC6600', marginTop: 2 }}>! {n}</div>
+                  ))}
+                </>
+              )}
+
+              {r.cuadrito?.celdas && (
+                <div style={{ marginTop: r.periodico.accion ? 10 : 0, paddingTop: r.periodico.accion ? 8 : 0, borderTop: r.periodico.accion ? '1px solid #C5C2BB' : 'none' }}>
+                  <div className="result-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Cuadrito — Grilla 7 días (para cargar en SAP)</span>
+                    <button
+                      className="sap-btn"
+                      style={{ fontSize: 11, padding: '1px 8px', minWidth: 'auto' }}
+                      onClick={copiarCuadrito}
+                      title="Copiar al portapapeles en formato TSV (pegable en Excel)"
+                    >
+                      &#128203; Copiar
+                    </button>
                   </div>
-                ) : (
-                  <div style={{ fontSize: 12 }}>
-                    <span className="semaphore-warn">&#10133; Crear:</span>{' '}
-                    <strong style={{ fontFamily: 'monospace' }}>{r.periodico.codigo_propuesto}</strong>{' '}
-                    <span style={{ color: '#666' }}>(familia {r.periodico.familia})</span>
-                    {r.periodico.detalle?.nota && (
-                      <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
-                        {r.periodico.detalle.nota}
-                      </div>
-                    )}
+
+                  <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>
+                    Diario utilizado: <strong style={{ fontFamily: 'monospace' }}>{r.cuadrito.codigo_diario_usado}</strong>
                   </div>
-                )}
-                {r.periodico.notas?.map((n, i) => (
-                  <div key={i} style={{ fontSize: 11, color: '#CC6600', marginTop: 2 }}>! {n}</div>
-                ))}
-              </div>
-            )}
 
-            {/* Cuadrito — justo debajo del detalle del periódico */}
-            {r.cuadrito?.celdas && (
-              <div className="result-section">
-                <div className="result-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Cuadrito — Grilla 7 días (para cargar en SAP)</span>
-                  <button
-                    className="sap-btn"
-                    style={{ fontSize: 11, padding: '1px 8px', minWidth: 'auto' }}
-                    onClick={copiarCuadrito}
-                    title="Copiar al portapapeles en formato TSV (pegable en Excel)"
-                  >
-                    &#128203; Copiar
-                  </button>
+                  <table className="alv-table">
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'center', minWidth: 36 }}>N&#186;</th>
+                        {r.cuadrito.dias.map(d => (
+                          <th key={d} style={{ textAlign: 'center', minWidth: 52 }}>
+                            {d.slice(0, 2)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 'bold', color: '#555' }}>001</td>
+                        {r.cuadrito.celdas.map((c, i) => (
+                          <td
+                            key={i}
+                            style={{
+                              textAlign: 'center',
+                              fontFamily: 'monospace',
+                              fontWeight: c !== 'LIBR' ? 'bold' : 'normal',
+                              color: c === 'LIBR' ? '#888888' : '#000000',
+                              background: c === 'LIBR' ? '#F0EDE8' : '#FFFFFF',
+                            }}
+                          >
+                            {c}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
+              )}
+            </div>
 
-                <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>
-                  Diario utilizado: <strong style={{ fontFamily: 'monospace' }}>{r.cuadrito.codigo_diario_usado}</strong>
-                </div>
-
-                <table className="alv-table">
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'center', minWidth: 36 }}>N&#186;</th>
-                      {r.cuadrito.dias.map(d => (
-                        <th key={d} style={{ textAlign: 'center', minWidth: 52 }}>
-                          {d.slice(0, 2)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace', fontWeight: 'bold', color: '#555' }}>001</td>
-                      {r.cuadrito.celdas.map((c, i) => (
-                        <td
-                          key={i}
-                          style={{
-                            textAlign: 'center',
-                            fontFamily: 'monospace',
-                            fontWeight: c !== 'LIBR' ? 'bold' : 'normal',
-                            color: c === 'LIBR' ? '#888888' : '#000000',
-                            background: c === 'LIBR' ? '#F0EDE8' : '#FFFFFF',
-                          }}
-                        >
-                          {c}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Correlativo turno */}
+            {/* Correlativo de Turno + Horario Parseado — juntos en un solo cuadro */}
             <div className="result-section">
               <div className="result-section-title">Correlativo de Turno (Regla)</div>
               <div>
                 <span className={sem.cls}>{sem.label}</span>
               </div>
               <div style={{ fontSize: 12, marginTop: 2 }}>{r.turno.nota}</div>
-            </div>
 
-            {/* Horario parseado — debajo del correlativo de turno */}
-            <div className="result-section">
-              <div className="result-section-title">Horario Parseado</div>
+              <div className="result-section-title" style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #C5C2BB' }}>
+                Horario Parseado
+              </div>
               <table style={{ fontSize: 12, borderCollapse: 'collapse', lineHeight: 1.6 }}>
                 <tbody>
                   <tr>
