@@ -17,6 +17,11 @@ class AnalisisRequest(BaseModel):
     pedidos: List[PedidoIn]
 
 
+class LoginRequest(BaseModel):
+    usuario: str
+    contrasena: str
+
+
 class GenerarTurnoRequest(BaseModel):
     tipo: str                                    # 'franco_corrido' | 'multihorario' | 'rotativo'
     agrupador: int

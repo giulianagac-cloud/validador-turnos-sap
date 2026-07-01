@@ -79,6 +79,49 @@ Las tablas SAP cargadas se persisten en **`Documentos\ValidadorTurnos\`** del us
 actual (no junto al `.exe`, que puede estar en una carpeta de solo lectura). La
 carpeta se crea sola. Esto aplica tanto al `.exe` como al modo desarrollo.
 
+## Despliegue en Vercel (solución transitoria de equipo)
+
+Mientras se gestiona un servidor interno de Trenes Argentinos, la app se puede
+desplegar en Vercel para que el equipo la use en conjunto. Es un modo de
+despliegue **adicional** — el modo local/`.exe` sigue funcionando exactamente
+igual, sin login y con persistencia en disco.
+
+En Vercel, la persistencia de las 3 tablas SAP pasa a **Vercel Blob Storage**
+(en vez de disco local) y se agrega una **pantalla de login compartida por el
+equipo** (usuario/contraseña únicos, no individual) que protege todos los
+endpoints de `/api/*`. Esto se activa solo/automáticamente al correr como
+función de Vercel (detecta la variable de entorno `VERCEL` que Vercel setea
+sola) — no hay ningún flag para tocar a mano.
+
+### Variables de entorno a configurar en el dashboard de Vercel
+
+Nunca van en el código ni en el repo — se cargan en **Project Settings →
+Environment Variables**:
+
+| Variable | Para qué es | Cómo se obtiene |
+|---|---|---|
+| `APP_USERNAME` | Usuario del login compartido del equipo | La define la usuaria |
+| `APP_PASSWORD` | Contraseña del login compartido del equipo | La define la usuaria |
+| `APP_SECRET_KEY` | Clave para firmar la cookie de sesión (HMAC) | Generarla una vez, ej.: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `BLOB_READ_WRITE_TOKEN` | Acceso a Vercel Blob Storage | La agrega Vercel automáticamente al crear el Blob store y conectarlo al proyecto — no hace falta cargarla a mano |
+
+### Pasos generales de deploy
+
+1. Conectar el repositorio de GitHub desde el dashboard de Vercel (Add New →
+   Project → Import Git Repository), dejando el **Root Directory** en la raíz
+   del repo (no en `frontend/`) — el build y las funciones serverless lo
+   necesitan así.
+2. Crear un Blob store desde la pestaña **Storage** del proyecto y conectarlo
+   (esto agrega `BLOB_READ_WRITE_TOKEN` solo).
+3. Cargar `APP_USERNAME`, `APP_PASSWORD` y `APP_SECRET_KEY` en Environment
+   Variables.
+4. Deploy (automático al pushear a la rama conectada, o `vercel deploy` desde
+   la CLI).
+5. Entrar a la URL del proyecto, loguearse con las credenciales del equipo, y
+   cargar los 3 Excels de SAP una sola vez en la pantalla de Carga de Tablas
+   — quedan disponibles para todo el equipo sin que cada quien los vuelva a
+   subir.
+
 ## Seguridad
 
 1. **Sin persistencia de datos de empleados**: los archivos Excel se procesan
@@ -90,6 +133,16 @@ carpeta se crea sola. Esto aplica tanto al `.exe` como al modo desarrollo.
 
 3. **Solo para red interna**: está diseñada para correr en la computadora del operador
    o en la red interna de Trenes Argentinos. No exponer a internet.
+
+   > **Excepción consciente — despliegue transitorio en Vercel:** el modo Vercel
+   > (ver sección de despliegue más arriba) sí queda accesible por internet,
+   > detrás de un login compartido del equipo. Es una decisión evaluada: las 3
+   > tablas SAP que procesa la app (Diarios, Periódicos, Turnos) fueron
+   > verificadas por la usuaria y no contienen datos personales de empleados
+   > (legajo, nombre, DNI) — solo códigos de horario y configuración
+   > organizativa. Si en el futuro se incorporan tablas o pedidos que sí
+   > contengan datos personales, esta arquitectura debe reevaluarse antes de
+   > subirlos a Vercel.
 
 ## Uso
 

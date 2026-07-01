@@ -3,23 +3,26 @@ import TablasLoader from './components/TablasLoader';
 import PedidoForm from './components/PedidoForm';
 import GeneradorGrilla from './components/GeneradorGrilla';
 import ResultadoCard from './components/ResultadoCard';
+import LoginScreen from './components/LoginScreen';
 import type { TablasState, ResultadoAnalisis } from './types';
-import { estadoTablas } from './api';
+import { estadoTablas, whoami } from './api';
 import { formatLoadTime, formatElapsed } from './utils';
 
 // Horas tras las cuales se muestra la advertencia de tablas desactualizadas
 const STALE_HOURS = 8;
 
 type Tab = 'tablas' | 'pedido' | 'resultados';
+type AuthState = 'checking' | 'needed' | 'ok';
 
 export default function App() {
+  const [authState, setAuthState] = useState<AuthState>('checking');
   const [tab, setTab] = useState<Tab>('tablas');
   const [tablas, setTablas] = useState<TablasState | null>(null);
   const [resultados, setResultados] = useState<ResultadoAnalisis[]>([]);
   const [statusMsg, setStatusMsg] = useState('Consultando estado del servidor...');
   const [statusType, setStatusType] = useState<'ok' | 'error' | 'info'>('info');
 
-  useEffect(() => {
+  const cargarEstadoInicial = () => {
     estadoTablas()
       .then(estado => {
         if (estado.cargadas && estado.timestamp_ms) {
@@ -42,7 +45,51 @@ export default function App() {
         setStatusMsg('No se pudo conectar con el backend. Verificá que esté corriendo.');
         setStatusType('error');
       });
+  };
+
+  useEffect(() => {
+    // whoami() siempre existe y no requiere sesión: en modo local (sin login)
+    // devuelve authenticated=true directo, así que acá nunca se muestra el
+    // login. En Vercel refleja si hay o no una cookie de sesión válida.
+    whoami()
+      .then(w => {
+        if (w.authenticated) {
+          setAuthState('ok');
+          cargarEstadoInicial();
+        } else {
+          setAuthState('needed');
+        }
+      })
+      .catch(() => {
+        // Si ni siquiera whoami responde, seguimos igual: estadoTablas()
+        // va a mostrar el error de conexión real en la barra de estado.
+        setAuthState('ok');
+        cargarEstadoInicial();
+      });
   }, []);
+
+  if (authState === 'needed') {
+    return (
+      <LoginScreen
+        onLoginOk={() => {
+          setAuthState('ok');
+          cargarEstadoInicial();
+        }}
+      />
+    );
+  }
+
+  if (authState === 'checking') {
+    return (
+      <div className="app-root">
+        <div className="sap-header">
+          <span style={{ fontSize: 16 }}>&#9632;</span>
+          Validador de Turnos SAP HCM &mdash; Trenes Argentinos
+        </div>
+        <div className="sap-statusbar">Consultando estado del servidor...</div>
+      </div>
+    );
+  }
 
   const setStatus = (msg: string, type: 'ok' | 'error' | 'info' = 'info') => {
     setStatusMsg(msg);

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .paths import frontend_dist
-from .routers import analizar
+from .routers import analizar, auth_router
 
 # Ruta al frontend compilado. El helper resuelve el caso congelado (.exe ->
 # sys._MEIPASS) y el de desarrollo (árbol del proyecto).
@@ -35,6 +35,7 @@ app.add_middleware(
 )
 
 # Los routers de /api van PRIMERO: tienen prioridad sobre el catch-all del SPA.
+app.include_router(auth_router.router, prefix="/api")
 app.include_router(analizar.router, prefix="/api")
 
 

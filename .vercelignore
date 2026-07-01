@@ -1,0 +1,12 @@
+# No hace falta empaquetar esto en la función Python de Vercel.
+frontend/node_modules
+frontend/dist
+frontend/.vite
+data_local
+dist
+build
+*.spec
+__pycache__
+*.py[cod]
+venv
+.venv

@@ -16,6 +16,11 @@ export interface TablasStatus {
   n_turnos: number;
 }
 
+export interface WhoAmI {
+  authenticated: boolean;
+  auth_enabled: boolean;
+}
+
 export interface EstadoTablas {
   cargadas: boolean;
   timestamp_ms: number | null;

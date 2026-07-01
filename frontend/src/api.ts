@@ -1,6 +1,6 @@
 import type {
   CargarPedidoResponse, EstadoTablas, GenerarTurnoInput, PedidoIn,
-  ResultadoAnalisis, ResultadoGrilla, TablasStatus,
+  ResultadoAnalisis, ResultadoGrilla, TablasStatus, WhoAmI,
 } from './types';
 
 // Ruta relativa por defecto: funciona servido desde el backend (mismo origen).
@@ -61,6 +61,28 @@ export async function listarSolapas(archivo: File): Promise<{ ok: boolean; solap
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Error al leer el archivo');
   }
+  return res.json();
+}
+
+export async function login(usuario: string, contrasena: string): Promise<void> {
+  const res = await fetch(`${BASE}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario, contrasena }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Usuario o contraseña incorrectos.');
+  }
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${BASE}/logout`, { method: 'POST' });
+}
+
+export async function whoami(): Promise<WhoAmI> {
+  const res = await fetch(`${BASE}/whoami`);
+  if (!res.ok) throw new Error('No se pudo consultar el estado de sesión.');
   return res.json();
 }
 

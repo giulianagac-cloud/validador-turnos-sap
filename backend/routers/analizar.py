@@ -1,5 +1,4 @@
 import io
-import json
 import math
 import re
 import unicodedata
@@ -8,68 +7,43 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from .. import storage_backend
+from ..auth import requerir_sesion
 from ..models.schemas import AnalisisRequest, GenerarTurnoRequest
-from ..paths import data_dir
 from turnos_engine import MotorTurnos
 
-router = APIRouter()
+# Todas las rutas de este router requieren sesión iniciada (no-op en local/.exe,
+# solo se exige de verdad cuando corre en Vercel — ver backend/auth.py).
+router = APIRouter(dependencies=[Depends(requerir_sesion)])
 _motor: Optional[MotorTurnos] = None
-
-# ---------------------------------------------------------------------------
-# Persistencia local en Documentos/ValidadorTurnos (nunca se sube al repo).
-# Va a Documentos para que funcione igual como .exe (donde el dir del programa
-# puede ser de solo lectura) y en desarrollo.
-# ---------------------------------------------------------------------------
-_DATA_DIR = data_dir()
-_FILE_DIARIOS = _DATA_DIR / 'diarios.bin'
-_FILE_PERIODICOS = _DATA_DIR / 'periodicos.bin'
-_FILE_TURNOS = _DATA_DIR / 'turnos.bin'
-_FILE_META = _DATA_DIR / 'meta.json'
-
-
-def _leer_meta() -> Optional[dict]:
-    try:
-        return json.loads(_FILE_META.read_text(encoding='utf-8'))
-    except Exception:
-        return None
 
 
 def _guardar_en_disco(bytes_d: bytes, bytes_p: bytes, bytes_t: bytes,
                       n_diarios: int, n_periodicos: int, n_turnos: int) -> None:
-    _DATA_DIR.mkdir(exist_ok=True)
-    _FILE_DIARIOS.write_bytes(bytes_d)
-    _FILE_PERIODICOS.write_bytes(bytes_p)
-    _FILE_TURNOS.write_bytes(bytes_t)
-    meta = {
-        'timestamp': datetime.now().isoformat(timespec='seconds'),
-        'n_diarios': n_diarios,
-        'n_periodicos': n_periodicos,
-        'n_turnos': n_turnos,
-    }
-    _FILE_META.write_text(json.dumps(meta, ensure_ascii=False), encoding='utf-8')
+    """Persiste las 3 tablas (disco local o Vercel Blob, según el entorno)."""
+    storage_backend.guardar(bytes_d, bytes_p, bytes_t, n_diarios, n_periodicos, n_turnos)
 
 
 def _cargar_desde_disco() -> None:
-    """Intenta reconstruir _motor desde los archivos en data_local/. Llamado en startup."""
+    """Intenta reconstruir _motor desde la persistencia (disco o Blob). Llamado en startup."""
     global _motor
-    if not _FILE_META.exists() or not _FILE_DIARIOS.exists():
+    datos = storage_backend.cargar()
+    if datos is None:
         return
+    bytes_d, bytes_p, bytes_t = datos
     try:
-        buf_d = io.BytesIO(_FILE_DIARIOS.read_bytes())
-        buf_p = io.BytesIO(_FILE_PERIODICOS.read_bytes())
-        buf_t = io.BytesIO(_FILE_TURNOS.read_bytes())
-        _motor = MotorTurnos(buf_d, buf_p, buf_t)
-        meta = _leer_meta() or {}
-        print(f"[startup] Tablas cargadas desde disco: "
+        _motor = MotorTurnos(io.BytesIO(bytes_d), io.BytesIO(bytes_p), io.BytesIO(bytes_t))
+        meta = storage_backend.leer_meta() or {}
+        print(f"[startup] Tablas cargadas: "
               f"{meta.get('n_diarios',0)} diarios, "
               f"{meta.get('n_periodicos',0)} periódicos, "
               f"{meta.get('n_turnos',0)} turnos "
               f"(cargadas el {meta.get('timestamp','?')})")
     except Exception as exc:
-        print(f"[startup] No se pudo cargar tablas desde disco: {exc}")
+        print(f"[startup] No se pudo cargar tablas: {exc}")
 
 
 def _sanitize(obj: Any) -> Any:
@@ -111,7 +85,7 @@ def estado_tablas():
     if _motor is None:
         return {"cargadas": False, "timestamp_ms": None,
                 "n_diarios": 0, "n_periodicos": 0, "n_turnos": 0}
-    meta = _leer_meta()
+    meta = storage_backend.leer_meta()
     ts_ms: Optional[int] = None
     if meta and meta.get('timestamp'):
         try:
