@@ -74,18 +74,23 @@ class HorarioParseado:
 # Parser principal
 # ---------------------------------------------------------------------------
 _RE_HORA = re.compile(r'(\d{1,2})[:.](\d{2})')
-# "hs" opcional (con o sin espacio) pegado al primer horario, ej. "14:00hs a 21:00hs"
-_RE_RANGO = re.compile(r'(\d{1,2}[:.]\d{2})\s*(?:hs\.?)?\s*a\s*(\d{1,2}[:.]\d{2})')
+# "hs" opcional (con o sin espacio) pegado al primer horario, ej. "14:00hs a 21:00hs".
+# Los minutos son opcionales en cada horario (ej. "14:00 a 21" -> 21:00).
+_RE_RANGO = re.compile(r'(\d{1,2}(?:[:.]\d{2})?)\s*(?:hs\.?)?\s*a\s*(\d{1,2}(?:[:.]\d{2})?)')
 
 
 def _to_min(hhmm: str) -> int:
-    h, m = re.split(r'[:.]', hhmm)
-    return int(h) * 60 + int(m)
+    partes = re.split(r'[:.]', hhmm)
+    h = int(partes[0])
+    m = int(partes[1]) if len(partes) > 1 and partes[1] else 0
+    return h * 60 + m
 
 
 def _fmt(hhmm: str) -> str:
-    h, m = re.split(r'[:.]', hhmm)
-    return f'{int(h):02d}:{int(m):02d}'
+    partes = re.split(r'[:.]', hhmm)
+    h = int(partes[0])
+    m = int(partes[1]) if len(partes) > 1 and partes[1] else 0
+    return f'{h:02d}:{m:02d}'
 
 
 def parse_horario(texto: str) -> HorarioParseado:
