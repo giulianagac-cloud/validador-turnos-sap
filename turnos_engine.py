@@ -484,9 +484,15 @@ class MotorTurnos:
         else:
             df, col = self.turnos, 'Regla p.plan h.tbjo.'
         familias, _ = self._familias_de(df, col, agrupador)
-        # Caso especial: Roca (24), periódico no-flex → preferir serie "R" sobre "RA" u otras
-        if capa == 'periodico' and agrupador == 24 and not es_flex and 'R' in familias:
-            return 'R'
+        # Casos especiales: para estos agrupadores, en periódico no-flex, la serie de
+        # 1 letra es la GENERICA (uso normal). Las otras series de 2 letras (RA, TA, ...)
+        # no son variantes numeradas de esa serie: son series de otro tipo de periódico
+        # (ej. TA en Mitre = "Rotación Boletería", no un correlativo mas nuevo de T).
+        FAMILIA_GENERICA_PERIODICO_NO_FLEX = {24: 'R', 28: 'T'}
+        if capa == 'periodico' and not es_flex and agrupador in FAMILIA_GENERICA_PERIODICO_NO_FLEX:
+            pref_generico = FAMILIA_GENERICA_PERIODICO_NO_FLEX[agrupador]
+            if pref_generico in familias:
+                return pref_generico
         prefijos = sorted(familias.keys(), key=lambda p: -len(p))  # mas largos primero (FLEX suele ser mas largo)
         flex_pref = [p for p in prefijos if any(f in p.upper() for f in ['F', 'FL'])]
         normal_pref = [p for p in prefijos if p not in flex_pref]
