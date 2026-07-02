@@ -77,3 +77,23 @@ turno, tolerancia, cuadrito, notas, ok`.
 - Español rioplatense en UI y comentarios.
 - No agregar dependencias pesadas sin necesidad. Stack: FastAPI + pandas + openpyxl
   (backend), React + Vite + TS (frontend).
+
+## Qué modelo usar para este proyecto
+
+Guía rápida de cuándo usar cada modelo con Claude Code en este repo:
+
+- **Sonnet (default)**: usar para el 90% del trabajo — agregar endpoints, ajustar
+  reglas de negocio, debuggear, mapear columnas, tareas de tamaño chico/mediano.
+  Es el que se usó para construir prácticamente todo el proyecto hasta ahora
+  (motor, generador de grillas, backend, frontend, empaquetado).
+- **Opus**: reservar para tareas puntualmente grandes o de diseño complejo, donde
+  hay muchas piezas interdependientes y un error temprano de diseño sale caro
+  (ej. si en el futuro se aborda un refactor grande, o el pendiente de chequeo de
+  horas para periódicos rotativos multisemana). Más lento y caro — usar solo
+  cuando el problema lo justifique, no por defecto.
+- **Haiku**: para tareas simples y mecánicas, poco relevante para el tipo de
+  trabajo de este proyecto.
+
+Regla simple: arrancar siempre con Sonnet. Si una tarea puntual es de diseño muy
+grande/complejo y Sonnet da vueltas sin converger, probar esa tarea con Opus y
+volver a Sonnet después.

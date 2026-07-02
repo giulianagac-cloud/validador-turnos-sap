@@ -215,7 +215,7 @@ async def cargar_pedido(
             cols = list(df.columns)
 
             # mapeo por patrones (tolerante a variaciones de nombre)
-            c_codigo   = _buscar_col(cols, "codigo")
+            c_codigo   = _buscar_col(cols, "codigo") or _buscar_col(cols, "ticket")
             c_desc     = _buscar_col(cols, "descripcion")
             c_detalle  = _buscar_col(cols, "detalle", "horario") or _buscar_col(cols, "detalle")
             c_hs_dia   = _buscar_col(cols, "horas", "diaria")
