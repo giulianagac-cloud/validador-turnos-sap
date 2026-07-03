@@ -39,8 +39,15 @@ class MotorMock:
     def buscar_diario(self, agrupador, ini, fin):
         key = (agrupador, ini, fin)
         if key in self.diarios_ex:
-            cod = self.diarios_ex[key]
-            return ResultadoBusqueda(existe=True, codigos=[(cod, f'{ini}-{fin}', 8.0)])
+            val = self.diarios_ex[key]
+            cods = list(val) if isinstance(val, (list, tuple)) else [val]
+            return ResultadoBusqueda(
+                existe=True,
+                codigos=[(c, f'{ini}-{fin}', 8.0) for c in cods],
+                duplicado=len(cods) > 1,
+                notas=([f'DUPLICADO: {len(cods)} codigos distintos para este horario '
+                        f'en el agrupador: {", ".join(cods)}'] if len(cods) > 1 else []),
+            )
         return ResultadoBusqueda(existe=False)
 
     def buscar_periodico(self, agrupador, grilla):
@@ -369,6 +376,78 @@ def test_periodico_rotado():
 
 
 # ---------------------------------------------------------------------------
+# REGRESIÓN — diario DUPLICADO: el periódico existe pero está guardado con el
+# segundo código del duplicado. Caso real LR846/R848: 03:00-11:00 existe como
+# R008 y R175; R848 usa R175. La app arma la grilla con R008 (el primero) y debe
+# reconocer R848 probando la alternativa R175, y alinear la grilla a R175.
+# ---------------------------------------------------------------------------
+def test_diario_duplicado_periodico_existe():
+    print('\n' + '=' * 60)
+    print('DUPLICADO: periódico guardado con el 2do código del diario (R175 vs R008)')
+    print('=' * 60)
+    motor = MotorMock(
+        diarios_existentes={
+            (24, '11:00', '19:00'): 'R055',
+            (24, '03:00', '11:00'): ['R008', 'R175'],   # duplicado: R848 usa R175
+        },
+        periodicos_existentes={
+            (24, (('LIBR', 'R055', 'R055', 'R055', 'R055', 'R055', 'R055'),
+                  ('LIBR', 'R175', 'R175', 'R175', 'R175', 'R175', 'R175'))): 'R848',
+        },
+        ultimo_diario=175, ultimo_periodico=847, ultimo_turno=845,
+    )
+    pedidos = [
+        {'codigo': 'LR846A', 'descripcion': 'ROT TPTE 26', 'agrupador': 24,
+         'detalle_horario': 'SEM 1 - 11:00 A 19:00', 'franco': 'Lunes'},
+        {'codigo': 'LR846B', 'descripcion': 'ROT TPTE 26', 'agrupador': 24,
+         'detalle_horario': 'SEM 2 - 03:00 A 11:00', 'franco': 'Lunes'},
+    ]
+    r = resolver_lote_rotativo(pedidos, motor)[0]
+    print(f'  periodico: {r["periodico"]["accion"]} {r["periodico"].get("codigo")}')
+    print(f'  Sem2: {r["semanas_codigos"][1]}')
+
+    check(r['periodico']['accion'] == 'existe',
+          'periódico reconocido como YA CREADO (no propone crear)',
+          f'FALLA: accion={r["periodico"]["accion"]}')
+    check(r['periodico'].get('codigo') == 'R848',
+          'periódico correcto: R848')
+    check(r['semanas_codigos'][1] == ['LIBR'] + ['R175'] * 6,
+          'grilla Sem2 alineada a R175 (el que usa R848), no R008',
+          f'Sem2={r["semanas_codigos"][1]}')
+    check(any('R175' in n and 'R848' in n for n in r['notas']),
+          'nota explica que se usa R175 porque es el del periódico R848')
+
+
+def test_diario_duplicado_sin_periodico():
+    print('\n' + '=' * 60)
+    print('DUPLICADO: sin periódico existente -> usa el primero (R008) y avisa confirmar')
+    print('=' * 60)
+    # Mismo duplicado pero NINGÚN periódico guardado: no hay evidencia para elegir,
+    # se queda con el primero (R008) y propone crear el periódico.
+    motor = MotorMock(
+        diarios_existentes={
+            (24, '11:00', '19:00'): 'R055',
+            (24, '03:00', '11:00'): ['R008', 'R175'],
+        },
+        ultimo_diario=175, ultimo_periodico=847, ultimo_turno=845,
+    )
+    pedidos = [
+        {'codigo': 'LR846A', 'descripcion': 'ROT TPTE 26', 'agrupador': 24,
+         'detalle_horario': 'SEM 1 - 11:00 A 19:00', 'franco': 'Lunes'},
+        {'codigo': 'LR846B', 'descripcion': 'ROT TPTE 26', 'agrupador': 24,
+         'detalle_horario': 'SEM 2 - 03:00 A 11:00', 'franco': 'Lunes'},
+    ]
+    r = resolver_lote_rotativo(pedidos, motor)[0]
+    check(r['periodico']['accion'] == 'crear',
+          'sin periódico guardado propone crear')
+    check(r['semanas_codigos'][1] == ['LIBR'] + ['R008'] * 6,
+          'grilla Sem2 queda con el primero (R008)',
+          f'Sem2={r["semanas_codigos"][1]}')
+    check(any('duplicado' in n.lower() and 'R008' in n and 'R175' in n for n in r['notas']),
+          'nota reporta el duplicado y que se usa el primero; confirmar')
+
+
+# ---------------------------------------------------------------------------
 # CHEQUEO DE HORAS — rotativo prolijo (LR846): 8h/día, 48h/sem, todo coincide.
 # ---------------------------------------------------------------------------
 def _motor_lr846():
@@ -482,6 +561,8 @@ if __name__ == '__main__':
     test_roca_rotativo()
     test_bisagra_roca_martes()
     test_periodico_rotado()
+    test_diario_duplicado_periodico_existe()
+    test_diario_duplicado_sin_periodico()
     test_horas_rotativo_ok()
     test_horas_rotativo_mismatch()
     test_horas_semanas_desiguales()
