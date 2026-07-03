@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import TablasLoader from './components/TablasLoader';
 import PedidoForm from './components/PedidoForm';
 import GeneradorGrilla from './components/GeneradorGrilla';
-import ResultadoCard from './components/ResultadoCard';
 import GrillaResultado from './components/GrillaResultado';
 import LoginScreen from './components/LoginScreen';
 import type { TablasState, AnyResultado, PedidoDisplay } from './types';
 import { esRotativo } from './types';
+import { simpleToGrilla } from './simpleToGrilla';
 import { estadoTablas, whoami } from './api';
 import { formatLoadTime, formatElapsed } from './utils';
 
@@ -232,7 +232,7 @@ export default function App() {
           {resultados.map((r, i) => (
             esRotativo(r)
               ? <GrillaResultado key={i} resultado={r} pedidos={pedidosPorCodigo} />
-              : <ResultadoCard key={i} resultado={r} />
+              : <GrillaResultado key={i} resultado={simpleToGrilla(r)} pedidos={pedidosPorCodigo} />
           ))}
         </div>
       </div>
