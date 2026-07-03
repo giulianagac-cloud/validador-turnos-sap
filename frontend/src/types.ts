@@ -67,7 +67,7 @@ export interface CorrelativoDetalle {
 }
 
 export interface ResultadoDiario {
-  accion: 'existe' | 'crear';
+  accion: 'existe' | 'crear' | 'elegir_flex';
   codigo?: string;
   todos?: DiarioDetalle[];
   duplicado?: boolean;
@@ -75,11 +75,13 @@ export interface ResultadoDiario {
   codigo_propuesto?: string;
   familia?: string;
   detalle?: CorrelativoDetalle;
+  candidatos?: DiarioDetalle[];   // FLEX: diarios candidatos para que el usuario elija
 }
 
 export interface ResultadoPeriodico {
-  accion: 'existe' | 'crear';
+  accion: 'existe' | 'crear' | 'pendiente_flex';
   codigo?: string;
+  nota?: string;
   duplicado?: boolean;
   notas?: string[];
   codigo_propuesto?: string;
@@ -247,6 +249,7 @@ export interface ResultadoAnalisis {
   cuadrito: Cuadrito;
   notas: string[];
   ok: boolean;
+  flex?: boolean;   // pedido FLEX sin rango: no autocompletable, hay que elegir el diario
   error?: string;
 }
 

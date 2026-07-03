@@ -583,6 +583,78 @@ def test_parser_dias_rango():
 
 
 # ---------------------------------------------------------------------------
+# FLEX — "Flex 6 hrs" (sin rango): lista diarios FLEX candidatos del agrupador
+# por horas declaradas, para que el usuario elija. Nunca elige uno solo.
+# ---------------------------------------------------------------------------
+def _motor_flex():
+    import pandas as pd
+    from turnos_engine import MotorTurnos
+    m = MotorTurnos.__new__(MotorTurnos)   # sin __init__: no lee Excel
+    m.diarios = pd.DataFrame({
+        'Agrup.para PHTD':      [34, 34, 34, 34, 34, 28],
+        'Plan hor.tbjo.diario': ['BF02', 'BF12', 'ZLFN', 'B048', 'BF16', 'MF06'],
+        'Texto plan hr.tr.dia': ['Flex 36 - 6', 'Flex 36 6 NOC', 'Flex 6 hr NOC',
+                                 '13:00 a 19:00', 'Flex 4 Horas', 'Flex 6 Horas'],
+        'Horas trabajo teór.':  ['6', '6', '6', '6', '4', '6'],
+    })
+    m._indexar_diarios()
+    return m
+
+
+def test_flex_candidatos_por_horas():
+    print('\n' + '=' * 60)
+    print('FLEX: lista candidatos por horas declaradas (no elige uno solo)')
+    print('=' * 60)
+    m = _motor_flex()
+    cands = m.candidatos_diario_flex(34, 6)
+    cods = [c['codigo'] for c in cands]
+    print(f'  candidatos 6h agrup 34: {cods}')
+    check(set(cods) == {'BF02', 'BF12', 'ZLFN'},
+          'lista los 3 FLEX de 6h del agrupador 34',
+          f'obtuvo {cods}')
+    check('B048' not in cods, 'excluye el diario con rango (no FLEX)')
+    check('BF16' not in cods, 'excluye el FLEX de otras horas (4h)')
+    check('MF06' not in cods, 'excluye FLEX de otro agrupador (28)')
+
+
+def test_flex_sin_match_ofrece_todos():
+    print('\n' + '=' * 60)
+    print('FLEX: si no hay match exacto de horas, ofrece TODOS los FLEX del agrup')
+    print('=' * 60)
+    m = _motor_flex()
+    cands = m.candidatos_diario_flex(34, 99)   # ninguna de 99h
+    cods = {c['codigo'] for c in cands}
+    check(cods == {'BF02', 'BF12', 'ZLFN', 'BF16'},
+          'sin match por horas, devuelve todos los FLEX del agrupador 34',
+          f'obtuvo {cods}')
+
+
+def test_flex_analisis_elegir():
+    print('\n' + '=' * 60)
+    print('FLEX: el análisis marca elegir_flex y adjunta los candidatos')
+    print('=' * 60)
+    import pandas as pd
+    m = _motor_flex()
+    # turnos mínimos para que validar_correlativo_turno no reviente
+    m.turnos = pd.DataFrame({
+        'Agrup.para PHTD':       [34],
+        'Regla p.plan h.tbjo.':  ['LBS882'],
+    })
+    r = m._analizar_flex('LBS883', 'Flex 6 hrs', 'Flex 6 hrs', 34, 6, 30, None, {})
+    check(r['flex'] is True and r['ok'] is False,
+          'resultado marcado FLEX y ok=False (requiere elección)')
+    check(r['diario']['accion'] == 'elegir_flex',
+          'diario.accion = elegir_flex')
+    check(len(r['diario']['candidatos']) == 3,
+          '3 candidatos de 6h adjuntos',
+          f'{len(r["diario"]["candidatos"])} candidatos')
+    check(r['periodico']['accion'] == 'pendiente_flex',
+          'periódico queda pendiente de la elección del diario')
+    check(r['validaciones']['horas_diarias']['declarado'] == 6,
+          'muestra las horas declaradas (6) sin calcular')
+
+
+# ---------------------------------------------------------------------------
 # Ejecutar
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -597,6 +669,9 @@ if __name__ == '__main__':
     test_horas_rotativo_mismatch()
     test_horas_semanas_desiguales()
     test_parser_dias_rango()
+    test_flex_candidatos_por_horas()
+    test_flex_sin_match_ofrece_todos()
+    test_flex_analisis_elegir()
 
     print('\n' + '=' * 60)
     print(f'RESULTADO: {PASS} PASS, {FAIL} FAIL')

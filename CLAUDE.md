@@ -91,8 +91,19 @@ turno, tolerancia, cuadrito, notas, ok`.
   no bloquea el turno. Detecta semanas desiguales cuando la bisagra mezcla duraciones.
   Ver `generador_grillas.horas_de_horario`/`calcular_horas_grilla` y
   `puente_grilla_motor._validar_horas_rotativo`.
+- Turnos FLEX sin rango (ej. "Flex 6 hrs"): **soportados con listado de candidatos**.
+  El detalle FLEX no trae horario, así que no se puede armar un diario solo. El motor
+  detecta el pedido como FLEX (`clasificar_texto` → cat 'flex'), lista los diarios FLEX
+  del agrupador que coinciden en horas declaradas (si ninguno coincide, ofrece todos) y
+  deja que la usuaria elija. NUNCA elige uno solo. El resultado trae `flex: True`,
+  `diario.accion='elegir_flex'` con `candidatos`, y `periodico.accion='pendiente_flex'`.
+  Ver `turnos_engine.candidatos_diario_flex`/`_analizar_flex`; el frontend lo muestra en
+  un bloque ámbar "elegí el diario" (`ResultadoCard`). Verificado contra LBS 29.05.2025.
+- Parser de días: tolera plural ("Lunes a **sabados**"), abreviatura ("Lun a Sab") y
+  wrap de semana ("sabados a lunes"). Ver `turnos_engine._dia_idx`.
 - Pendiente a futuro: ciclos de 3+ semanas (el diseño lo soporta pero solo se probó
-  con 2); afinar matcheo FLEX con más casos.
+  con 2); resolver el periódico/correlativo del FLEX una vez elegido el diario (hoy
+  queda como elección manual); afinar matcheo FLEX con más casos.
 
 ## Convenciones
 

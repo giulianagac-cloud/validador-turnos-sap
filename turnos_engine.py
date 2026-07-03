@@ -239,6 +239,14 @@ def _norm_flex(t_orig: str) -> str:
     return t
 
 
+def _horas_a_float(v):
+    """'7,2' -> 7.2, '8' -> 8.0. None si no parsea (tolera coma decimal de SAP)."""
+    try:
+        return float(str(v).replace(',', '.').strip())
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
 def horario_a_canon(hora_inicio: str, hora_fin: str) -> str:
     return f'{_to_min(hora_inicio)//60:02d}:{_to_min(hora_inicio)%60:02d}-' \
            f'{_to_min(hora_fin)//60:02d}:{_to_min(hora_fin)%60:02d}'
@@ -263,8 +271,14 @@ class MotorTurnos:
         self._indexar_diarios()
 
     def _indexar_diarios(self):
-        """Construye un índice: (agrupador, rango_canonico) -> lista de codigos."""
+        """Construye índices de diarios:
+        - _idx_diario      : (agrupador, rango_canonico) -> [(cod, orig, horas)]  (diarios con rango)
+        - _idx_diario_flex : agrupador -> [(cod, orig, horas_float)]              (diarios FLEX)
+        Los FLEX no tienen rango horario: se listan por agrupador para que el
+        usuario elija (OBSERVA y PROPONE; el motor nunca elige uno solo).
+        """
         self._idx_diario = {}
+        self._idx_diario_flex = {}
         for _, r in self.diarios.iterrows():
             agr = r['Agrup.para PHTD']
             cod = str(r['Plan hor.tbjo.diario']).strip()
@@ -274,6 +288,30 @@ class MotorTurnos:
             if cat == 'rango' and canon:
                 key = (agr, canon)
                 self._idx_diario.setdefault(key, []).append((cod, orig, horas))
+            elif cat == 'flex':
+                self._idx_diario_flex.setdefault(agr, []).append((cod, orig, _horas_a_float(horas)))
+
+    def candidatos_diario_flex(self, agrupador: int, horas_dia=None, tol=0.01) -> list:
+        """Diarios FLEX del agrupador. Si horas_dia viene, filtra por esa cantidad
+        de horas (tolerancia tol). Si no coincide ninguno, devuelve TODOS los FLEX
+        del agrupador para que el usuario elija igual. Nunca elige uno solo.
+        Devuelve [{'codigo','texto','horas'}, ...] sin duplicar códigos."""
+        if not hasattr(self, '_idx_diario_flex'):
+            self._indexar_diarios()
+        items = self._idx_diario_flex.get(agrupador, [])
+        # Deduplicar por código respetando el orden
+        vistos, unicos = set(), []
+        for cod, orig, h in items:
+            if cod not in vistos:
+                vistos.add(cod)
+                unicos.append((cod, orig, h))
+        cands = unicos
+        if horas_dia is not None:
+            hd = _horas_a_float(horas_dia)
+            filtrados = [it for it in unicos if it[2] is not None and abs(it[2] - hd) < tol]
+            if filtrados:                 # solo si hay match; si no, se ofrecen todos
+                cands = filtrados
+        return [{'codigo': c, 'texto': o, 'horas': h} for c, o, h in cands]
 
     def buscar_diario(self, agrupador: int, hora_inicio: str, hora_fin: str) -> ResultadoBusqueda:
         canon = horario_a_canon(hora_inicio, hora_fin)
@@ -520,8 +558,63 @@ class MotorTurnos:
             key = (capa, agrupador, mt.group(1))
             reservas.setdefault(key, set()).add(int(mt.group(2)))
 
+    def _analizar_flex(self, codigo_pedido, descripcion, detalle_horario, agrupador,
+                       horas_diarias_decl, horas_sem_decl, horas_men_decl, reservas):
+        """Resuelve un pedido FLEX (sin rango horario). No arma grilla ni propone
+        diario/periódico: lista los diarios FLEX candidatos del agrupador (filtrados
+        por horas declaradas si las hay) y deja que el usuario elija. El correlativo
+        de turno sí se valida (el código de turno existe igual)."""
+        candidatos = self.candidatos_diario_flex(agrupador, horas_diarias_decl)
+        nota_hs = (f'{len(candidatos)} diario(s) FLEX de {horas_diarias_decl} h en el agrupador'
+                   if horas_diarias_decl is not None else
+                   f'{len(candidatos)} diario(s) FLEX en el agrupador')
+        out = {
+            'pedido': {'codigo': codigo_pedido, 'descripcion': descripcion,
+                       'detalle': detalle_horario, 'agrupador': agrupador,
+                       'linea': AGRUPADOR_LINEA.get(agrupador, '?'), 'es_flex': True},
+            'horario': {
+                'inicio': None, 'fin': None, 'cruza_medianoche': False, 'fsi': None,
+                'dias_trabaja': [], 'dias_franco': [],
+                'horas_diarias_calc': None, 'horas_sem_calc': None,
+            },
+            'validaciones': {},
+            'diario': {
+                'accion': 'elegir_flex',
+                'candidatos': candidatos,
+                'notas': [f'Turno FLEX: no trae horario fijo. Elegí el diario FLEX '
+                          f'correspondiente ({nota_hs}).'],
+            },
+            'periodico': {
+                'accion': 'pendiente_flex',
+                'nota': 'El periódico depende del diario FLEX que elijas.',
+            },
+            'turno': self.validar_correlativo_turno(agrupador, codigo_pedido, reservas),
+            'tolerancia': {}, 'cuadrito': {},
+            'notas': ['Pedido FLEX detectado: se listan diarios FLEX candidatos para elegir.'],
+            'ok': False,   # requiere una elección del usuario; no es autocompletable
+            'flex': True,
+        }
+        # Horas declaradas: se muestran tal cual (no hay cálculo posible sin rango).
+        v = {}
+        if horas_diarias_decl is not None:
+            v['horas_diarias'] = {'declarado': horas_diarias_decl, 'calculado': None, 'coincide': None}
+        if horas_sem_decl is not None:
+            v['horas_sem'] = {'declarado': horas_sem_decl, 'calculado': None, 'coincide': None}
+        out['validaciones'] = v
+        return out
+
     def _analizar_impl(self, codigo_pedido, descripcion, detalle_horario,
                        agrupador, horas_diarias_decl, horas_sem_decl, horas_men_decl, es_flex, reservas):
+        # FLEX sin rango (ej. "Flex 6 hrs"): no hay horario del cual sacar un
+        # diario. En vez de mandarlo a REVISAR MANUAL a secas, se detecta como
+        # FLEX y se listan los diarios FLEX candidatos del agrupador para que el
+        # usuario elija. OBSERVA y PROPONE: nunca elige uno solo.
+        _, cat_detalle, _ = clasificar_texto(detalle_horario)
+        if cat_detalle == 'flex':
+            return self._analizar_flex(codigo_pedido, descripcion, detalle_horario,
+                                       agrupador, horas_diarias_decl, horas_sem_decl,
+                                       horas_men_decl, reservas)
+
         p = parse_horario(detalle_horario)
         out = {
             'pedido': {'codigo': codigo_pedido, 'descripcion': descripcion,
