@@ -85,9 +85,14 @@ turno, tolerancia, cuadrito, notas, ok`.
 - Turnos rotativos multisemana: soportados al subir el Excel (detección + grilla de
   bisagra + correlativos encadenados + variantes A/B con fecha de referencia).
   Verificado contra ROCA TPTE 26.
-- Pendiente a futuro: **chequeo formal de horas** para rotativos multisemana (hoy no
-  se valida; 6 días × 8h = 48 cierra a mano); ciclos de 3+ semanas (el diseño lo
-  soporta pero solo se probó con 2); afinar matcheo FLEX con más casos.
+- Chequeo formal de horas para rotativos multisemana: **hecho**. Calcula el desglose
+  exacto de la grilla (por horario, por semana, ciclo total) y lo compara contra lo
+  declarado en el pedido. OBSERVA y REPORTA (marca coincide True/False/None + notas),
+  no bloquea el turno. Detecta semanas desiguales cuando la bisagra mezcla duraciones.
+  Ver `generador_grillas.horas_de_horario`/`calcular_horas_grilla` y
+  `puente_grilla_motor._validar_horas_rotativo`.
+- Pendiente a futuro: ciclos de 3+ semanas (el diseño lo soporta pero solo se probó
+  con 2); afinar matcheo FLEX con más casos.
 
 ## Convenciones
 
@@ -105,9 +110,8 @@ Guía rápida de cuándo usar cada modelo con Claude Code en este repo:
   (motor, generador de grillas, backend, frontend, empaquetado).
 - **Opus**: reservar para tareas puntualmente grandes o de diseño complejo, donde
   hay muchas piezas interdependientes y un error temprano de diseño sale caro
-  (ej. si en el futuro se aborda un refactor grande, o el pendiente de chequeo de
-  horas para periódicos rotativos multisemana). Más lento y caro — usar solo
-  cuando el problema lo justifique, no por defecto.
+  (ej. si en el futuro se aborda un refactor grande del motor). Más lento y caro —
+  usar solo cuando el problema lo justifique, no por defecto.
 - **Haiku**: para tareas simples y mecánicas, poco relevante para el tipo de
   trabajo de este proyecto.
 
