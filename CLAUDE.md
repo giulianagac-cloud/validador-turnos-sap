@@ -101,6 +101,17 @@ turno, tolerancia, cuadrito, notas, ok`.
   un bloque ámbar "elegí el diario" (`ResultadoCard`). Verificado contra LBS 29.05.2025.
 - Parser de días: tolera plural ("Lunes a **sabados**"), abreviatura ("Lun a Sab") y
   wrap de semana ("sabados a lunes"). Ver `turnos_engine._dia_idx`.
+- Turno YA CREADO → **lookup inverso**: si el código de turno ya existe en `Turnos.XLSX`,
+  se lee su cadena REAL (turno → `PHT por períodos` → grilla del periódico → diarios) y
+  se muestra todo como YA CREADO con los códigos exactos y la Fe.referencia/Pto.arranque
+  reales, en vez de re-derivar del texto (que ante periódicos/diarios duplicados podría
+  dar otro código: ej. LBS885 usa BF24, no B400). Si el turno NO existe, sigue el flujo
+  hacia adelante (propone). Ver `turnos_engine.resolver_turno_existente`; el resultado
+  sale con `tipo:'existente'` y lo rinde `GrillaResultado`. Verificado con LBS 29.05.2025
+  (LBS883→BF22→ZLFN, LBS888→BF23→ZLFD).
+- Frontend: un solo renderer `GrillaResultado` para rotativos, simples, FLEX y ya-creados
+  (los simples se adaptan con `simpleToGrilla`). AGRUPADOR arriba → TURNO → PERIÓDICO →
+  DIARIO.
 - Pendiente a futuro: ciclos de 3+ semanas (el diseño lo soporta pero solo se probó
   con 2); resolver el periódico/correlativo del FLEX una vez elegido el diario (hoy
   queda como elección manual); afinar matcheo FLEX con más casos.

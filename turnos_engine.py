@@ -517,6 +517,116 @@ class MotorTurnos:
                 'ultimo_existente': f'{pref}{ultimo:0{ancho}d}', 'familia': pref}
 
     # -----------------------------------------------------------------------
+    # Lookup INVERSO: para un turno que YA EXISTE, leer de las tablas su cadena
+    # real (turno -> periodico -> diarios) y mostrarla toda como YA CREADO.
+    # Es lo correcto cuando el turno ya esta hecho: evita re-derivar del texto
+    # (que ante periodicos/diarios duplicados podria dar otro codigo).
+    # -----------------------------------------------------------------------
+    def _grilla_de_periodico(self, codigo_periodico: str) -> list:
+        """Devuelve la grilla real de un periodico: lista de semanas (7 codigos c/u),
+        ordenadas por numero de semana. [] si el periodico no existe o esta incompleto."""
+        if not hasattr(self, '_daycols'):
+            self._indexar_periodicos()
+        cod = str(codigo_periodico).strip()
+        sems = {}
+        for _, r in self.periodicos.iterrows():
+            if str(r['PHT por períodos']).strip() != cod:
+                continue
+            try:
+                n = int(r['Número de semana'])
+            except (ValueError, TypeError):
+                continue
+            if n not in sems:
+                sems[n] = [str(r[c]).strip() for c in self._daycols]
+        if not sems:
+            return []
+        return [sems[i] for i in range(1, max(sems) + 1) if i in sems]
+
+    def _diario_por_codigo(self, agrupador, codigo_diario: str) -> Optional[dict]:
+        """Info de un diario por su codigo (texto SAP, horas, rango canonico si aplica).
+        Filtra por agrupador; si no aparece en ese agrupador toma cualquier fila con
+        ese codigo (los FLEX se repiten identicos en todas las lineas)."""
+        cod = str(codigo_diario).strip()
+        df = self.diarios
+        sub = df[(df['Plan hor.tbjo.diario'].astype(str).str.strip() == cod)
+                 & (df['Agrup.para PHTD'] == agrupador)]
+        if sub.empty:
+            sub = df[df['Plan hor.tbjo.diario'].astype(str).str.strip() == cod]
+        if sub.empty:
+            return None
+        row = sub.iloc[0]
+        txt = str(row['Texto plan hr.tr.dia']).strip()
+        canon, cat, _ = clasificar_texto(txt)
+        return {'codigo': cod, 'texto': txt,
+                'horas': _horas_a_float(row['Horas trabajo teór.']),
+                'canon': canon if cat == 'rango' else None}
+
+    def resolver_turno_existente(self, agrupador, codigo_pedido) -> Optional[dict]:
+        """Si el codigo de turno YA EXISTE en Turnos.XLSX, arma el resultado con su
+        cadena real (periodico + diarios), en formato de grilla para mostrarlo con el
+        mismo render que los rotativos. Devuelve None si el turno no existe."""
+        cod = str(codigo_pedido).strip()
+        col = 'Regla p.plan h.tbjo.'
+        sub = self.turnos[self.turnos[col].astype(str).str.strip() == cod]
+        if sub.empty:
+            return None
+        row = sub.iloc[0]
+        agr = row.get('Agrup.para PHTD')
+        try:
+            agr = int(agr)
+        except (ValueError, TypeError):
+            agr = agrupador
+        periodico = str(row.get('PHT por períodos', '')).strip()
+        semanas = self._grilla_de_periodico(periodico) if periodico and periodico.lower() != 'nan' else []
+
+        # Diarios distintos usados en la grilla -> info real de cada uno
+        codigos_grilla = {c for sem in semanas for c in sem if c not in ('LIBR', '', 'nan')}
+        diarios = {}
+        for c in sorted(codigos_grilla):
+            info = self._diario_por_codigo(agr, c)
+            if info is None:
+                continue
+            clave = info['canon'] or info['texto']   # clave de display (rango o texto FLEX)
+            diarios[clave] = {
+                'accion': 'existe', 'codigo': c, 'duplicado': False,
+                'todos': [{'codigo': c, 'texto': info['texto'], 'horas': info['horas']}],
+            }
+
+        # Fe.referencia PHTP -> dd.mm.yyyy ; Pto.arranque
+        feref = str(row.get('Fe.referencia PHTP', '')).strip()[:10]
+        if len(feref) == 10 and feref[4] == '-':
+            feref = f'{feref[8:10]}.{feref[5:7]}.{feref[0:4]}'
+        try:
+            pto = int(float(str(row.get('Pto.arranque en PHTP', '')).strip()))
+        except (ValueError, TypeError):
+            pto = 1
+        txt_turno = str(row.get('Txt.reg.plan horar.tbjo.', '')).strip()
+
+        return {
+            'tipo': 'existente',
+            'ya_existe': True,
+            'codigo_turno': cod,
+            'descripcion_real': txt_turno,
+            'agrupador': agr,
+            'n_semanas': len(semanas) or 1,
+            'semanas_codigos': semanas,
+            'dias': list(_DIA_NOMBRE),
+            'diarios': diarios,
+            'acciones_diario': [],
+            'periodico': {'accion': 'existe', 'codigo': periodico or None},
+            'turno': {'estado': 'duplicado',
+                      'nota': f'{cod} ya existe en la tabla (agrupador {agr}).',
+                      'ultimo_existente': cod},
+            'fecha_referencia': {'fecha_referencia': feref, 'punto_arranque': pto,
+                                 'dia_semana': '', 'offset_dias': 0},
+            'hay_revisar': False,
+            'notas': [f'Turno YA CREADO. Cadena real leída de las tablas: '
+                      f'turno {cod} → periódico {periodico or "?"} → '
+                      f'diario(s) {", ".join(sorted(codigos_grilla)) or "?"}.'],
+            'ok': True,
+        }
+
+    # -----------------------------------------------------------------------
     # Detectar familia de diario/periodico segun si el pedido es FLEX o normal
     # -----------------------------------------------------------------------
     def familia_objetivo(self, capa: str, agrupador: int, es_flex: bool):
@@ -605,6 +715,15 @@ class MotorTurnos:
 
     def _analizar_impl(self, codigo_pedido, descripcion, detalle_horario,
                        agrupador, horas_diarias_decl, horas_sem_decl, horas_men_decl, es_flex, reservas):
+        # Turno YA CREADO: si el codigo ya existe en la tabla, se lee su cadena real
+        # (periodico + diarios) por lookup inverso y se muestra todo como YA CREADO,
+        # en vez de re-derivar del texto del pedido (que podria dar otro codigo ante
+        # duplicados). Trae ademas la descripcion cruda del pedido para el encabezado.
+        existente = self.resolver_turno_existente(agrupador, codigo_pedido)
+        if existente is not None:
+            existente['descripcion_pedido'] = descripcion
+            return existente
+
         # FLEX sin rango (ej. "Flex 6 hrs"): no hay horario del cual sacar un
         # diario. En vez de mandarlo a REVISAR MANUAL a secas, se detecta como
         # FLEX y se listan los diarios FLEX candidatos del agrupador para que el

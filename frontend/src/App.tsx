@@ -5,7 +5,7 @@ import GeneradorGrilla from './components/GeneradorGrilla';
 import GrillaResultado from './components/GrillaResultado';
 import LoginScreen from './components/LoginScreen';
 import type { TablasState, AnyResultado, PedidoDisplay } from './types';
-import { esRotativo } from './types';
+import { esRotativo, esExistente } from './types';
 import { simpleToGrilla } from './simpleToGrilla';
 import { estadoTablas, whoami } from './api';
 import { formatLoadTime, formatElapsed } from './utils';
@@ -230,7 +230,7 @@ export default function App() {
             </div>
           )}
           {resultados.map((r, i) => (
-            esRotativo(r)
+            esRotativo(r) || esExistente(r)
               ? <GrillaResultado key={i} resultado={r} pedidos={pedidosPorCodigo} />
               : <GrillaResultado key={i} resultado={simpleToGrilla(r)} pedidos={pedidosPorCodigo} />
           ))}
