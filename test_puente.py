@@ -553,6 +553,36 @@ def test_horas_semanas_desiguales():
 
 
 # ---------------------------------------------------------------------------
+# PARSER DE DÍAS — variantes de rango que trae RRHH (formatos incrementales).
+# Bug real (pedido LBS 29.05.2025): "Lunes a sabados" (plural) daba solo [Lunes]
+# porque el plural no estaba en el mapa de días; caía a "día suelto".
+# ---------------------------------------------------------------------------
+def test_parser_dias_rango():
+    print('\n' + '=' * 60)
+    print('PARSER: rangos de días (plural, abreviado, wrap de semana)')
+    print('=' * 60)
+    from turnos_engine import parse_horario
+    LMMJVS = [0, 1, 2, 3, 4, 5]
+    casos = [
+        ('Lunes a sabados de 13:00 a 19:00', LMMJVS, 36.0),   # plural (el del bug)
+        ('Lunes a Sabados de 13:00 a 19:00', LMMJVS, 36.0),   # plural + mayúscula
+        ('Lun a Sab de 13:00 a 19:00',       LMMJVS, 36.0),   # abreviado 3 letras
+        ('Lunes a Sabado de 13:00 a 19:00',  LMMJVS, 36.0),   # singular (ya andaba)
+        ('lunes a viernes de 07:00 a 13:00', [0, 1, 2, 3, 4], 30.0),
+        ('Domingos de 08:00 a 14:00',        [6], 6.0),        # día suelto plural
+        ('sabados a lunes de 22:00 a 04:00', [0, 5, 6], 18.0), # wrap de semana
+    ]
+    for texto, dias_esp, hsem_esp in casos:
+        p = parse_horario(texto)
+        check(p.dias_trabaja == dias_esp,
+              f'{texto!r} -> días {dias_esp}',
+              f'{texto!r} -> días {p.dias_trabaja} (esperaba {dias_esp})')
+        check(p.horas_semanales_calc == hsem_esp,
+              f'{texto!r} -> {hsem_esp}h/sem',
+              f'{texto!r} -> {p.horas_semanales_calc}h (esperaba {hsem_esp})')
+
+
+# ---------------------------------------------------------------------------
 # Ejecutar
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -566,6 +596,7 @@ if __name__ == '__main__':
     test_horas_rotativo_ok()
     test_horas_rotativo_mismatch()
     test_horas_semanas_desiguales()
+    test_parser_dias_rango()
 
     print('\n' + '=' * 60)
     print(f'RESULTADO: {PASS} PASS, {FAIL} FAIL')

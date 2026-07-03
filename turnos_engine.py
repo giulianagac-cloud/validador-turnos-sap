@@ -27,7 +27,7 @@ def _norm(s: str) -> str:
 
 # Mapa de nombres de día -> índice 0=Lunes ... 6=Domingo
 _DIAS = {
-    'lunes': 0, 'l': 0, 'lu': 0,
+    'lunes': 0, 'l': 0, 'lu': 0, 'lun': 0,
     'martes': 1, 'ma': 1, 'mar': 1,
     'miercoles': 2, 'mi': 2, 'mie': 2, 'mier': 2, 'x': 2,
     'jueves': 3, 'ju': 3, 'jue': 3, 'j': 3,
@@ -40,7 +40,13 @@ _DIA_NOMBRE = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'D
 
 def _dia_idx(token: str) -> Optional[int]:
     t = _norm(token)
-    return _DIAS.get(t)
+    if t in _DIAS:
+        return _DIAS[t]
+    # Tolerar plural que usa RRHH: "sabados" -> "sabado", "domingos" -> "domingo".
+    # (lunes/martes/miercoles/jueves/viernes ya terminan en 's' y están en el mapa.)
+    if t.endswith('s') and t[:-1] in _DIAS:
+        return _DIAS[t[:-1]]
+    return None
 
 
 # ---------------------------------------------------------------------------
