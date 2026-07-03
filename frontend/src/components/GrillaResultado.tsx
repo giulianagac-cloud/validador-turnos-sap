@@ -56,7 +56,7 @@ function badgeTurno(estado?: string): EstadoVisual {
 function badgeAccion(accion?: string): EstadoVisual {
   if (accion === 'crear') return BADGE.crear;
   if (accion === 'existe') return BADGE.creado;
-  if (accion === 'pendiente') return BADGE.revisar;
+  if (accion === 'pendiente' || accion === 'pendiente_flex') return BADGE.revisar;
   return BADGE.neutro;
 }
 
@@ -137,8 +137,15 @@ export default function GrillaResultado({
   return (
     <div className="sap-panel" style={{ marginBottom: 12 }}>
       <div className="sap-panel-title"
-        style={{ background: resultado.hay_revisar ? '#9E5000' : resultado.ok ? '#1A5C1A' : '#0A246A' }}>
-        {resultado.hay_revisar
+        style={{ background: resultado.parseError ? '#CC0000'
+          : resultado.flex ? '#9E5000'
+          : resultado.hay_revisar ? '#9E5000'
+          : resultado.ok ? '#1A5C1A' : '#0A246A' }}>
+        {resultado.parseError
+          ? `⚠ ${tituloTurno} — no se pudo interpretar el horario`
+          : resultado.flex
+          ? `${tituloTurno} — FLEX: elegí el diario`
+          : resultado.hay_revisar
           ? `⚠ ${tituloTurno} — hay celdas REVISAR MANUAL`
           : `Resultado — ${tituloTurno}${rotativo ? ' (ROTATIVO)' : ''}`}
       </div>
@@ -195,10 +202,16 @@ export default function GrillaResultado({
                         <td style={{ textAlign: 'center' }}>{p?.horas_sem_decl || '—'}</td>
                         <td style={{ textAlign: 'center' }}>{p?.feriados || '—'}</td>
                         <td style={{ ...mono, background: '#F3F7F0', borderLeft: '2px solid #7FB07F', whiteSpace: 'nowrap' }}>
-                          <span style={{ color: '#444' }}>Fe.ref</span>{' '}
-                          <b style={{ color: '#0A5C0A' }}>{v.ref.fecha_referencia}</b>{' '}
-                          <span style={{ color: '#444' }}>· Pto.arr</span>{' '}
-                          <b style={{ color: '#0A5C0A' }}>{v.ref.punto_arranque}</b>
+                          {v.ref.fecha_referencia ? (
+                            <>
+                              <span style={{ color: '#444' }}>Fe.ref</span>{' '}
+                              <b style={{ color: '#0A5C0A' }}>{v.ref.fecha_referencia}</b>{' '}
+                              <span style={{ color: '#444' }}>· Pto.arr</span>{' '}
+                              <b style={{ color: '#0A5C0A' }}>{v.ref.punto_arranque}</b>
+                            </>
+                          ) : (
+                            <span style={{ color: '#888' }}>—</span>
+                          )}
                         </td>
                         <td style={{ textAlign: 'center' }}><Badge v={turnoBadge} /></td>
                       </tr>
@@ -216,6 +229,60 @@ export default function GrillaResultado({
           </div>
         </div>
 
+        {/* ===== Error de parseo: aviso, sin periódico/diario ===== */}
+        {resultado.parseError && (
+          <div style={{ background: '#FFF0F0', border: '1px solid #CC0000', padding: 10, marginBottom: 12 }}>
+            <div style={{ color: '#CC0000', fontWeight: 'bold', marginBottom: 4 }}>
+              ⚠ No se pudo interpretar el detalle horario
+            </div>
+            {resultado.notas.map((n, i) => (
+              <div key={i} style={{ fontSize: 12, marginTop: 2 }}>{n}</div>
+            ))}
+          </div>
+        )}
+
+        {/* ===== FLEX: elegí el diario (candidatos, no autocompletable) ===== */}
+        {resultado.flex && (
+          <div className="sap-panel" style={{ marginBottom: 12 }}>
+            <div className="sap-panel-title" style={{ gap: 10, background: '#9E5000' }}>
+              <span style={stepStyle}>2·3</span>
+              <span>DIARIO / PERIÓDICO&nbsp;&nbsp;(FLEX — elegí el diario)</span>
+              <span style={{ marginLeft: 'auto' }}><Badge v={BADGE.revisar} /></span>
+            </div>
+            <div style={{ padding: 8 }}>
+              <p style={{ fontSize: 12, margin: '0 0 8px', color: '#444' }}>
+                Turno FLEX: no trae horario fijo, así que no se puede armar un diario solo.
+                Estos son los diarios FLEX del agrupador que coinciden en horas — elegí uno.
+                El periódico y el correlativo se resuelven una vez elegido.
+              </p>
+              {resultado.flexCandidatos && resultado.flexCandidatos.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="alv-table" style={{ fontSize: 12 }}>
+                    <thead>
+                      <tr><th>Código</th><th>Texto SAP</th><th style={{ textAlign: 'center' }}>Horas</th></tr>
+                    </thead>
+                    <tbody>
+                      {resultado.flexCandidatos.map((d, i) => (
+                        <tr key={i}>
+                          <td style={{ ...mono, fontWeight: 'bold' }}>{d.codigo}</td>
+                          <td>{d.texto}</td>
+                          <td style={{ ...mono, textAlign: 'center' }}>{d.horas}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#9E5000' }}>
+                  No hay diarios FLEX en este agrupador; cargar el diario a mano.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===== PERIÓDICO + DIARIO normales (turno con horario) ===== */}
+        {!resultado.parseError && !resultado.flex && (<>
         {/* ===== 2. PERIÓDICO ===== */}
         <div className="sap-panel" style={{ marginBottom: 12 }}>
           <div className="sap-panel-title" style={{ gap: 10 }}>
@@ -326,6 +393,7 @@ export default function GrillaResultado({
             })}
           </div>
         </div>
+        </>)}
 
         {/* Notas */}
         {resultado.notas.length > 0 && (

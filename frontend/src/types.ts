@@ -153,7 +153,7 @@ export interface ResultadoGrilla {
   diarios: Record<string, DiarioResuelto>;
   acciones_diario: AccionDiarioGrilla[];
   periodico: {
-    accion: 'existe' | 'crear' | 'pendiente' | 'sin_motor';
+    accion: 'existe' | 'crear' | 'pendiente' | 'pendiente_flex' | 'sin_motor';
     codigo?: string;
     codigo_propuesto?: string;
     todos?: string[];
@@ -168,6 +168,11 @@ export interface ResultadoGrilla {
   hay_revisar: boolean;
   notas: string[];
   ok: boolean;
+  // Extensiones para renderizar tambien resultados SIMPLES/FLEX con este mismo
+  // diseño (via adaptador simpleToGrilla). Ausentes en los rotativos reales.
+  flex?: boolean;
+  flexCandidatos?: DiarioDetalle[];
+  parseError?: boolean;
 }
 
 // Datos crudos del pedido (fila del Excel) que se conservan en el frontend para
