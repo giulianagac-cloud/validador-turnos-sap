@@ -77,8 +77,47 @@ export default function ResultadoCard({ resultado: r }: Props) {
         </span>
       </div>
 
-      {/* Error de parseo */}
-      {!r.ok && (
+      {/* FLEX: no es error, hay que elegir el diario FLEX a mano */}
+      {!r.ok && r.flex && (
+        <div style={{ background: '#FFF8E6', border: '1px solid #C9A227', padding: 8, margin: 4 }}>
+          <span style={{ color: '#8A6D00', fontWeight: 'bold' }}>
+            &#9888; Turno FLEX &mdash; elegí el diario correspondiente
+          </span>
+          <div style={{ fontSize: 12, marginTop: 4 }}>
+            Sin horario fijo. Horas declaradas:{' '}
+            <strong>{r.validaciones.horas_diarias?.declarado ?? '—'} h/día</strong>
+            {r.validaciones.horas_sem?.declarado != null && (
+              <> · <strong>{r.validaciones.horas_sem.declarado} h/sem</strong></>
+            )}
+          </div>
+          {r.diario.candidatos && r.diario.candidatos.length > 0 ? (
+            <table className="alv-table" style={{ marginTop: 6 }}>
+              <thead>
+                <tr><th>Código</th><th>Texto SAP</th><th>Horas</th></tr>
+              </thead>
+              <tbody>
+                {r.diario.candidatos.map((d, i) => (
+                  <tr key={i}>
+                    <td style={{ fontFamily: 'monospace' }}>{d.codigo}</td>
+                    <td>{d.texto}</td>
+                    <td style={{ textAlign: 'right' }}>{d.horas}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{ fontSize: 12, marginTop: 6, color: '#8A6D00' }}>
+              No hay diarios FLEX en este agrupador; cargar el diario a mano.
+            </div>
+          )}
+          <div style={{ fontSize: 11, marginTop: 6, color: '#6b6b6b' }}>
+            El periódico y el correlativo se resuelven una vez elegido el diario.
+          </div>
+        </div>
+      )}
+
+      {/* Error de parseo (no-FLEX) */}
+      {!r.ok && !r.flex && (
         <div style={{ background: '#FFF0F0', border: '1px solid #CC0000', padding: 8, margin: 4 }}>
           <span style={{ color: '#CC0000', fontWeight: 'bold' }}>
             &#9888; No se pudo interpretar el detalle horario
