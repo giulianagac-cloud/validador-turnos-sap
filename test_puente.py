@@ -77,23 +77,26 @@ class MotorMock:
         num = int(mt.group(2))
         reservas.setdefault((capa, agrupador, familia), set()).add(num)
 
-    def validar_correlativo_turno(self, agrupador, codigo_turno):
+    def validar_correlativo_turno(self, agrupador, codigo_turno, reservas=None):
         mt = re.match(r'^([A-Za-z]+)(\d+)$', str(codigo_turno))
         if not mt:
             return {'estado': 'revisar', 'nota': 'No se pudo parsear el codigo.'}
-        num = int(mt.group(2))
-        siguiente = self.ultimo_turno + 1
         fam = mt.group(1)
+        num = int(mt.group(2))
+        # Encadena con los correlativos ya reservados en el lote (igual que el motor real).
+        nums_reservados = (reservas or {}).get(('turno', agrupador, fam), set())
+        ultimo = max({self.ultimo_turno} | nums_reservados)
+        siguiente = ultimo + 1
+        if num in nums_reservados or num <= self.ultimo_turno:
+            return {'estado': 'duplicado', 'nota': f'Ya existe {fam}{num:03d}.',
+                    'ultimo_existente': f'{fam}{ultimo:03d}'}
         if num == siguiente:
             return {'estado': 'ok',
-                    'nota': f'Correlativo correcto. Anterior: {fam}{self.ultimo_turno:03d}',
-                    'ultimo_existente': f'{fam}{self.ultimo_turno:03d}'}
-        elif num > siguiente:
-            return {'estado': 'salto',
-                    'nota': f'Saltea numeros. Esperado {fam}{siguiente:03d}.',
-                    'esperado': f'{fam}{siguiente:03d}'}
-        else:
-            return {'estado': 'duplicado', 'nota': f'Ya existe {fam}{num:03d}.'}
+                    'nota': f'Correlativo correcto. Anterior: {fam}{ultimo:03d}',
+                    'ultimo_existente': f'{fam}{ultimo:03d}'}
+        return {'estado': 'salto',
+                'nota': f'Saltea numeros. Esperado {fam}{siguiente:03d}.',
+                'esperado': f'{fam}{siguiente:03d}'}
 
 
 # ---------------------------------------------------------------------------

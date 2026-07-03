@@ -6,7 +6,7 @@ interface Props {
 
 const SEMAFORO: Record<string, { cls: string; label: string }> = {
   ok:          { cls: 'semaphore-ok',    label: '● Correlativo OK' },
-  duplicado:   { cls: 'semaphore-error', label: '● YA EXISTE' },
+  duplicado:   { cls: 'semaphore-ok',    label: '● YA CREADO' },
   salto:       { cls: 'semaphore-warn',  label: '● SALTO' },
   retroactivo: { cls: 'semaphore-warn',  label: '● RETROACTIVO' },
   revisar:     { cls: 'semaphore-warn',  label: '● REVISAR' },

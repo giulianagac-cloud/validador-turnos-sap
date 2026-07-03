@@ -22,6 +22,45 @@ function esRot(r: ResultadoGrilla | ResultadoRotativo): r is ResultadoRotativo {
   return (r as ResultadoRotativo).tipo === 'rotativo';
 }
 
+// Modelo unificado de 3 estados para las 3 capas SAP (turno / periódico / diario).
+// La idea: "ya creado" se ve SIEMPRE igual (verde), nunca como error.
+type EstadoVisual = { label: string; color: string; bg: string };
+
+const BADGE = {
+  crear:   { label: 'CREAR',     color: '#0A246A', bg: '#E8F0FF' },
+  creado:  { label: 'YA CREADO', color: '#0A5C0A', bg: '#E3F1E3' },
+  revisar: { label: 'REVISAR',   color: '#9E5000', bg: '#FFF3CD' },
+  neutro:  { label: '—',         color: '#555',    bg: 'transparent' },
+} as const;
+
+/** Estado del TURNO (regla LR): ok=correlativo correcto a crear, duplicado=ya existe. */
+function badgeTurno(estado?: string): EstadoVisual {
+  if (estado === 'duplicado') return BADGE.creado;
+  if (estado === 'ok') return BADGE.crear;
+  if (estado === 'salto' || estado === 'retroactivo' || estado === 'revisar') return BADGE.revisar;
+  return BADGE.neutro;
+}
+
+/** Estado del PERIÓDICO/DIARIO: crear=hay que crearlo, existe=ya está en SAP. */
+function badgeAccion(accion?: string): EstadoVisual {
+  if (accion === 'crear') return BADGE.crear;
+  if (accion === 'existe') return BADGE.creado;
+  if (accion === 'pendiente') return BADGE.revisar;
+  return BADGE.neutro;
+}
+
+function Badge({ v }: { v: EstadoVisual }) {
+  return (
+    <span style={{
+      background: v.bg, color: v.color, fontWeight: 'bold',
+      padding: '1px 6px', border: `1px solid ${v.color}55`, fontSize: 10,
+      display: 'inline-block', whiteSpace: 'nowrap',
+    }}>
+      {v.label}
+    </span>
+  );
+}
+
 /**
  * Panel de resultado de una grilla (franco corrido / multi-horario / rotativo).
  * Compartido entre el Generador de Grilla (carga manual) y los Resultados del
@@ -32,11 +71,6 @@ export default function GrillaResultado({ resultado }: { resultado: ResultadoGri
     background: '#BDB9B3', fontWeight: 'bold', padding: '2px 6px',
     border: '1px solid #888', fontSize: 12, whiteSpace: 'nowrap',
   };
-
-  const estadoTurnoColor =
-    resultado.turno?.estado === 'ok' ? '#006600' :
-    resultado.turno?.estado === 'duplicado' ? '#CC0000' :
-    resultado.turno?.estado === 'salto' ? '#CC6600' : '#555';
 
   const rotativo = esRot(resultado);
   const titulo = rotativo
@@ -141,129 +175,113 @@ export default function GrillaResultado({ resultado }: { resultado: ResultadoGri
           </span>
         </div>
 
-        {/* Acciones */}
-        {(resultado.acciones_diario.length > 0 || resultado.periodico.accion === 'crear' || resultado.turno?.estado) && (
-          <div className="result-section" style={{ marginBottom: 8 }}>
-            <div className="result-section-title">Acciones SAP</div>
-            <table className="alv-table" style={{ fontSize: 11 }}>
-              <thead>
-                <tr>
-                  <th>Capa</th>
-                  <th>Acción</th>
-                  <th>Código</th>
-                  <th>Último existente</th>
-                  <th>Nota</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* Turno */}
-                <tr>
-                  <td>Turno (regla)</td>
-                  <td style={{ color: estadoTurnoColor, fontWeight: 'bold' }}>
-                    {resultado.turno?.estado?.toUpperCase() ?? '—'}
-                  </td>
-                  <td><strong>{rotativo ? resultado.codigo_base : resultado.codigo_turno}</strong></td>
-                  <td>{resultado.turno?.ultimo_existente ?? '—'}</td>
-                  <td style={{ maxWidth: 300 }}>{resultado.turno?.nota}</td>
-                </tr>
-                {/* Periódico */}
-                <tr>
-                  <td>Periódico</td>
-                  <td style={{ fontWeight: 'bold', color: resultado.periodico.accion === 'crear' ? '#0A246A' : resultado.periodico.accion === 'existe' ? '#006600' : '#9E5000' }}>
-                    {resultado.periodico.accion === 'crear' ? 'CREAR'
-                      : resultado.periodico.accion === 'existe' ? 'EXISTE'
-                      : resultado.periodico.accion === 'pendiente' ? 'PENDIENTE'
-                      : '—'}
-                  </td>
+        {/* Acciones SAP — una sola tabla con las 3 capas. "Ya creado" (verde) se ve
+            igual en turno, periódico y diario; nunca como error. */}
+        <div className="result-section" style={{ marginBottom: 8 }}>
+          <div className="result-section-title">Estado en SAP (turno · periódico · diarios)</div>
+          <table className="alv-table" style={{ fontSize: 11 }}>
+            <thead>
+              <tr>
+                <th>Capa</th>
+                <th>Estado</th>
+                <th>Código</th>
+                <th>Último existente</th>
+                <th>Nota</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Turno */}
+              <tr>
+                <td>Turno (regla)</td>
+                <td><Badge v={badgeTurno(resultado.turno?.estado)} /></td>
+                <td><strong>{rotativo ? resultado.codigo_base : resultado.codigo_turno}</strong></td>
+                <td>{resultado.turno?.ultimo_existente ?? '—'}</td>
+                <td style={{ maxWidth: 300 }}>{resultado.turno?.nota}</td>
+              </tr>
+              {/* Periódico */}
+              <tr>
+                <td>Periódico</td>
+                <td><Badge v={badgeAccion(resultado.periodico.accion)} /></td>
+                <td>
+                  <strong>
+                    {resultado.periodico.accion === 'crear'
+                      ? resultado.periodico.codigo_propuesto
+                      : resultado.periodico.codigo ?? '—'}
+                  </strong>
+                </td>
+                <td>{resultado.periodico.detalle?.ultimo_existente ?? '—'}</td>
+                <td style={{ maxWidth: 300 }}>
+                  {resultado.periodico.nota ?? resultado.periodico.detalle?.nota}
+                </td>
+              </tr>
+              {/* Diarios a crear */}
+              {resultado.acciones_diario.map((a, i) => (
+                <tr key={`crear-${i}`}>
+                  <td>Diario</td>
+                  <td><Badge v={BADGE.crear} /></td>
                   <td>
-                    <strong>
-                      {resultado.periodico.accion === 'crear'
-                        ? resultado.periodico.codigo_propuesto
-                        : resultado.periodico.codigo ?? '—'}
-                    </strong>
+                    <strong>{a.codigo_propuesto}</strong>
+                    {a.tolerancia && (
+                      <span style={{ color: '#555', fontWeight: 'normal', marginLeft: 4 }}>
+                        ({a.tolerancia.inicio_teorico} a {a.tolerancia.final_teorico})
+                      </span>
+                    )}
                   </td>
-                  <td>{resultado.periodico.detalle?.ultimo_existente ?? '—'}</td>
+                  <td>{a.detalle?.ultimo_existente ?? '—'}</td>
                   <td style={{ maxWidth: 300 }}>
-                    {resultado.periodico.nota ?? resultado.periodico.detalle?.nota}
+                    {a.horario} — {a.detalle?.nota}
+                    {a.tolerancia && (
+                      <div style={{ marginTop: 4, paddingLeft: 6, borderLeft: '2px solid #BDB9B3', fontSize: 10, color: '#444', lineHeight: 1.8 }}>
+                        <div>
+                          <span style={{ color: '#888', marginRight: 3 }}>Tol. entrada:</span>
+                          <strong>{a.tolerancia.inicio_tolerancia}</strong>
+                          <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
+                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 2px', fontFamily: 'monospace' }}>
+                            [{a.tolerancia.inicio_teorico}]
+                          </span>
+                          <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
+                          <strong>{a.tolerancia.inicio_tolerancia_fin}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#888', marginRight: 3 }}>Tol. salida: &nbsp;&nbsp;&nbsp;</span>
+                          <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 2px', fontFamily: 'monospace' }}>
+                            [{a.tolerancia.final_teorico}]
+                          </span>
+                          <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
+                          <strong>{a.tolerancia.fin_tolerancia}</strong>
+                        </div>
+                      </div>
+                    )}
                   </td>
                 </tr>
-                {/* Diarios a crear */}
-                {resultado.acciones_diario.map((a, i) => (
-                  <tr key={i}>
+              ))}
+              {/* Diarios que YA existen en SAP (antes iban en una tabla aparte) */}
+              {Object.entries(resultado.diarios)
+                .filter(([, d]) => d.accion === 'existe')
+                .map(([horario, d]) => (
+                  <tr key={`existe-${horario}`}>
                     <td>Diario</td>
-                    <td style={{ fontWeight: 'bold', color: '#0A246A' }}>CREAR</td>
+                    <td><Badge v={BADGE.creado} /></td>
                     <td>
-                      <strong>{a.codigo_propuesto}</strong>
-                      {a.tolerancia && (
-                        <span style={{ color: '#555', fontWeight: 'normal', marginLeft: 4 }}>
-                          ({a.tolerancia.inicio_teorico} a {a.tolerancia.final_teorico})
-                        </span>
-                      )}
+                      {d.duplicado
+                        ? <span style={{ color: '#CC6600' }}>
+                            {d.todos?.map(t => t.codigo).join(', ')} <em>(duplicado — respetar todos)</em>
+                          </span>
+                        : <strong>{d.codigo}</strong>
+                      }
                     </td>
-                    <td>{a.detalle?.ultimo_existente ?? '—'}</td>
+                    <td>—</td>
                     <td style={{ maxWidth: 300 }}>
-                      {a.horario} — {a.detalle?.nota}
-                      {a.tolerancia && (
-                        <div style={{ marginTop: 4, paddingLeft: 6, borderLeft: '2px solid #BDB9B3', fontSize: 10, color: '#444', lineHeight: 1.8 }}>
-                          <div>
-                            <span style={{ color: '#888', marginRight: 3 }}>Tol. entrada:</span>
-                            <strong>{a.tolerancia.inicio_tolerancia}</strong>
-                            <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
-                            <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 2px', fontFamily: 'monospace' }}>
-                              [{a.tolerancia.inicio_teorico}]
-                            </span>
-                            <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
-                            <strong>{a.tolerancia.inicio_tolerancia_fin}</strong>
-                          </div>
-                          <div>
-                            <span style={{ color: '#888', marginRight: 3 }}>Tol. salida: &nbsp;&nbsp;&nbsp;</span>
-                            <span style={{ background: '#F5F2EA', border: '1px solid #C8C5BE', padding: '0 2px', fontFamily: 'monospace' }}>
-                              [{a.tolerancia.final_teorico}]
-                            </span>
-                            <span style={{ color: '#BBB', margin: '0 3px' }}>→</span>
-                            <strong>{a.tolerancia.fin_tolerancia}</strong>
-                          </div>
-                        </div>
-                      )}
+                      {horario}
+                      {d.todos?.[0]?.horas ? ` · ${d.todos[0].horas}h` : ''}
+                      {d.notas?.length ? ` · ${d.notas.join(' | ')}` : ''}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Diarios existentes (para info) */}
-        {Object.entries(resultado.diarios).some(([, d]) => d.accion === 'existe') && (
-          <div className="result-section" style={{ marginBottom: 8 }}>
-            <div className="result-section-title">Diarios existentes en SAP</div>
-            <table className="alv-table" style={{ fontSize: 11 }}>
-              <thead>
-                <tr><th>Horario</th><th>Código</th><th>Horas</th><th>Nota</th></tr>
-              </thead>
-              <tbody>
-                {Object.entries(resultado.diarios)
-                  .filter(([, d]) => d.accion === 'existe')
-                  .map(([horario, d]) => (
-                    <tr key={horario}>
-                      <td>{horario}</td>
-                      <td>
-                        {d.duplicado
-                          ? <span style={{ color: '#CC6600' }}>
-                              {d.todos?.map(t => t.codigo).join(', ')} (duplicado)
-                            </span>
-                          : <strong>{d.codigo}</strong>
-                        }
-                      </td>
-                      <td>{d.todos?.[0]?.horas ?? '—'}</td>
-                      <td style={{ fontSize: 10, color: '#666' }}>{d.notas?.join(' | ')}</td>
-                    </tr>
-                  ))
-                }
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
 
         {/* Notas */}
         {resultado.notas.length > 0 && (
