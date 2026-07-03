@@ -138,6 +138,19 @@ export default function GrillaResultado({
 
   return (
     <div className="sap-panel" style={{ marginBottom: 12 }}>
+      {/* ===== AGRUPADOR: primera instancia, arriba del título del turno ===== */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: '8px 14px',
+        background: 'linear-gradient(180deg,#F1EFE8,#E2DFD5)',
+        borderBottom: '1px solid #888', boxShadow: 'inset 1px 1px 0 #fff',
+      }}>
+        <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#444', fontWeight: 'bold' }}>
+          Agrupador
+        </span>
+        <span style={{ ...mono, fontSize: 30, lineHeight: 1, fontWeight: 'bold', color: '#0A246A' }}>{agr}</span>
+        {linea && <span style={{ fontSize: 15, color: '#444' }}>· {linea}</span>}
+      </div>
       <div className="sap-panel-title"
         style={{ background: resultado.parseError ? '#CC0000'
           : resultado.flex ? '#9E5000'
@@ -155,20 +168,6 @@ export default function GrillaResultado({
       </div>
 
       <div style={{ padding: 10 }}>
-
-        {/* ===== AGRUPADOR: primera instancia, lo primero que se busca ===== */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12,
-          padding: '8px 14px',
-          background: 'linear-gradient(180deg,#F1EFE8,#E2DFD5)',
-          border: '1px solid #888', boxShadow: 'inset 1px 1px 0 #fff',
-        }}>
-          <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#444', fontWeight: 'bold' }}>
-            Agrupador
-          </span>
-          <span style={{ ...mono, fontSize: 30, lineHeight: 1, fontWeight: 'bold', color: '#0A246A' }}>{agr}</span>
-          {linea && <span style={{ fontSize: 15, color: '#444' }}>· {linea}</span>}
-        </div>
 
         {/* ===== 1. TURNO ===== */}
         <div className="sap-panel" style={{ marginBottom: 12 }}>
@@ -293,10 +292,21 @@ export default function GrillaResultado({
             <span style={stepStyle}>2</span>
             <span>PERIÓDICO&nbsp;&nbsp;(grilla semanal)</span>
             <span style={{ marginLeft: 'auto' }}>
-              <Badge v={periodicoBadge} extra={periodicoCodigo ?? undefined} />
+              <Badge v={periodicoBadge} />
             </span>
           </div>
           <div style={{ padding: 8 }}>
+            {/* Código del periódico, prominente (como el turno y el diario) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px',
+              background: '#E1DED4', border: '1px solid #C5C2BB', marginBottom: 8 }}>
+              <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: '#444' }}>
+                Código periódico
+              </span>
+              <span style={{ ...mono, fontSize: 14, fontWeight: 'bold' }}>{periodicoCodigo ?? '—'}</span>
+              <span style={{ marginLeft: 'auto' }}>
+                <Badge v={periodicoBadge} extra={resultado.periodico.accion === 'crear' ? 'proponer' : undefined} />
+              </span>
+            </div>
             {resultado.periodico.accion === 'crear' && (
               <p style={{ fontSize: 11, color: '#444', margin: '0 0 7px' }}>
                 Un solo periódico <b style={mono}>{periodicoCodigo}</b> para toda la rotación.
