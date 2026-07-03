@@ -7,7 +7,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from generador_grillas import generar_franco_corrido, generar_rotativo, Grilla, Celda, DIAS_ORDEN
-from puente_grilla_motor import resolver_grilla, CODIGO_FRANCO, CODIGO_REVISAR
+from puente_grilla_motor import resolver_grilla, resolver_lote_rotativo, CODIGO_FRANCO, CODIGO_REVISAR
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +369,111 @@ def test_periodico_rotado():
 
 
 # ---------------------------------------------------------------------------
+# CHEQUEO DE HORAS — rotativo prolijo (LR846): 8h/día, 48h/sem, todo coincide.
+# ---------------------------------------------------------------------------
+def _motor_lr846():
+    return MotorMock(
+        diarios_existentes={
+            (28, '11:00', '19:00'): 'R055',
+            (28, '03:00', '11:00'): 'R175',
+        },
+        ultimo_diario=175, ultimo_periodico=847, ultimo_turno=845,
+    )
+
+
+def test_horas_rotativo_ok():
+    print('\n' + '=' * 60)
+    print('HORAS: rotativo prolijo LR846 — 8h/día, 48h/sem (todo coincide)')
+    print('=' * 60)
+    pedidos = [
+        {'codigo': 'LR846A', 'descripcion': 'ROT TPTE 26', 'agrupador': 28,
+         'detalle_horario': 'SEM 1 - 11:00 A 19:00', 'franco': 'Lunes',
+         'horas_diarias_decl': 8, 'horas_sem_decl': 48},
+        {'codigo': 'LR846B', 'descripcion': 'ROT TPTE 26', 'agrupador': 28,
+         'detalle_horario': 'SEM 2 - 03:00 A 11:00', 'franco': 'Lunes',
+         'horas_diarias_decl': 8, 'horas_sem_decl': 48},
+    ]
+    r = resolver_lote_rotativo(pedidos, _motor_lr846())[0]
+    vh = r['validaciones_horas']
+    print(f'  por_semana: {r["horas"]["por_semana"]}')
+    print(f'  diaria: {vh["diaria"]}')
+    print(f'  semanal: {vh["semanal"]}')
+
+    check([s['horas'] for s in r['horas']['por_semana']] == [48.0, 48.0],
+          'ambas semanas suman 48h',
+          f'horas por semana: {r["horas"]["por_semana"]}')
+    check([s['dias_trabajados'] for s in r['horas']['por_semana']] == [6, 6],
+          '6 días trabajados por semana')
+    check(all(x['coincide'] for x in vh['diaria']),
+          'horas diarias coinciden (8h) en las dos SEM')
+    check(all(x['coincide'] for x in vh['semanal']),
+          'horas semanales coinciden (48h) en las dos semanas')
+    check(not vh['semanas_desiguales'], 'semanas iguales')
+    check(vh['ok'], 'validación de horas OK')
+
+
+def test_horas_rotativo_mismatch():
+    print('\n' + '=' * 60)
+    print('HORAS: declara 40h/sem pero la grilla suma 48 -> aviso, no bloquea')
+    print('=' * 60)
+    pedidos = [
+        {'codigo': 'LR846A', 'descripcion': 'ROT TPTE 26', 'agrupador': 28,
+         'detalle_horario': 'SEM 1 - 11:00 A 19:00', 'franco': 'Lunes',
+         'horas_diarias_decl': 8, 'horas_sem_decl': 40},
+        {'codigo': 'LR846B', 'descripcion': 'ROT TPTE 26', 'agrupador': 28,
+         'detalle_horario': 'SEM 2 - 03:00 A 11:00', 'franco': 'Lunes',
+         'horas_diarias_decl': 8, 'horas_sem_decl': 40},
+    ]
+    r = resolver_lote_rotativo(pedidos, _motor_lr846())[0]
+    vh = r['validaciones_horas']
+    print(f'  semanal: {vh["semanal"]}')
+
+    check(all(x['coincide'] for x in vh['diaria']),
+          'horas diarias siguen coincidiendo (8h)')
+    check(all(x['coincide'] is False for x in vh['semanal']),
+          'horas semanales marcan NO coincide (48 calc vs 40 decl)')
+    check(not vh['ok'], 'validación de horas marca ok=False')
+    check(any('semanales' in n.lower() for n in r['notas']),
+          'hay nota avisando la diferencia semanal')
+    check(r['ok'], 'el turno igual queda ok (no lo bloquea el chequeo de horas)')
+
+
+def test_horas_semanas_desiguales():
+    print('\n' + '=' * 60)
+    print('HORAS: bisagra con horarios de distinta duración -> semanas desiguales')
+    print('=' * 60)
+    # ROCA franco MARTES, SEM1=07-13 (6h), SEM2=13-21 (8h). La bisagra mezcla:
+    # Sem1 = 8 + 6*5 = 38h ; Sem2 = 6 + 8*5 = 46h.
+    motor = MotorMock(
+        diarios_existentes={
+            (24, '07:00', '13:00'): 'R055',
+            (24, '13:00', '21:00'): 'R175',
+        },
+        ultimo_diario=175, ultimo_periodico=220, ultimo_turno=100,
+    )
+    pedidos = [
+        {'codigo': 'LR101A', 'descripcion': 'ROT', 'agrupador': 24,
+         'detalle_horario': 'SEM 1 - 07:00 A 13:00', 'franco': 'Martes',
+         'horas_diarias_decl': 6, 'horas_sem_decl': None},
+        {'codigo': 'LR101B', 'descripcion': 'ROT', 'agrupador': 24,
+         'detalle_horario': 'SEM 2 - 13:00 A 21:00', 'franco': 'Martes',
+         'horas_diarias_decl': 8, 'horas_sem_decl': None},
+    ]
+    r = resolver_lote_rotativo(pedidos, motor)[0]
+    vh = r['validaciones_horas']
+    print(f'  por_semana: {r["horas"]["por_semana"]}')
+
+    check(sorted(s['horas'] for s in r['horas']['por_semana']) == [38.0, 46.0],
+          'semanas suman 38h y 46h (bisagra mezcla duraciones)',
+          f'horas: {[s["horas"] for s in r["horas"]["por_semana"]]}')
+    check(vh['semanas_desiguales'], 'flag semanas_desiguales = True')
+    check(any('no cargan lo mismo' in n for n in r['notas']),
+          'nota avisa que las semanas no cargan lo mismo')
+    check(all(x['coincide'] for x in vh['diaria']),
+          'horas diarias coinciden (6h y 8h según SEM)')
+
+
+# ---------------------------------------------------------------------------
 # Ejecutar
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -377,6 +482,9 @@ if __name__ == '__main__':
     test_roca_rotativo()
     test_bisagra_roca_martes()
     test_periodico_rotado()
+    test_horas_rotativo_ok()
+    test_horas_rotativo_mismatch()
+    test_horas_semanas_desiguales()
 
     print('\n' + '=' * 60)
     print(f'RESULTADO: {PASS} PASS, {FAIL} FAIL')

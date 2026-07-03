@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from turnos_engine import (
-    parse_horario, _DIA_NOMBRE, _DIAS, _norm,
+    parse_horario, _DIA_NOMBRE, _DIAS, _norm, _to_min,
 )
 
 DIAS_ORDEN = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo']
@@ -315,6 +315,68 @@ def calcular_fecha_referencia(indice_variante: int, offset_dia: int = 0) -> dict
 def variante_a_indice(letra: str) -> int:
     """'A'->0, 'B'->1, 'C'->2..."""
     return ord(letra.strip().upper()) - ord('A')
+
+
+# ---------------------------------------------------------------------------
+# Cálculo de horas de una grilla (para el chequeo formal de horas de rotativos)
+# OBSERVA y REPORTA: calcula el valor exacto y lo deja a la vista; la validación
+# contra lo declarado (y la decisión) viven arriba. NO redondea a horas enteras.
+# ---------------------------------------------------------------------------
+def horas_de_horario(canon: str) -> Optional[float]:
+    """'11:00-19:00' -> 8.0. Tolera cruce de medianoche ('23:00-05:00' -> 6.0).
+
+    Reusa la misma aritmética de minutos del motor (_to_min) para que la duración
+    coincida exacto con la que calcula el analizador simple. None si no parsea.
+    """
+    if not canon or '-' not in canon:
+        return None
+    ini, fin = canon.split('-', 1)
+    try:
+        mi, mf = _to_min(ini), _to_min(fin)
+    except (ValueError, AttributeError):
+        return None
+    dur = (24 * 60 - mi) + mf if mf <= mi else mf - mi
+    return round(dur / 60, 2)
+
+
+def calcular_horas_grilla(grilla: 'Grilla') -> dict:
+    """Desglose de horas de una grilla ya construida (N semanas × 7 días).
+
+    Cuenta SOLO días efectivamente trabajados: excluye francos (LIBR), celdas
+    "a órdenes" (horario incierto) y celdas sin definir. Devuelve:
+      - por_horario:  horas diarias de cada horario distinto de la grilla
+      - por_semana:   días trabajados y horas de cada semana del ciclo
+      - ciclo_total:  suma de todas las semanas
+      - promedio_semanal
+      - semanas_desiguales: True si las semanas del ciclo no cargan lo mismo
+        (pasa cuando la "bisagra" mezcla horarios de distinta duración → hay que
+        mirarlo a mano; en un rotativo prolijo todas las semanas cierran igual).
+    """
+    def es_trabajado(c) -> bool:
+        return bool(c.horario) and not c.es_franco and not c.a_ordenes
+
+    vistos: list = []
+    for sem in grilla.semanas:
+        for c in sem:
+            if es_trabajado(c) and c.horario not in vistos:
+                vistos.append(c.horario)
+    por_horario = [{'horario': h, 'horas': horas_de_horario(h)} for h in sorted(vistos)]
+
+    por_semana = []
+    for i, sem in enumerate(grilla.semanas, 1):
+        trab = [c for c in sem if es_trabajado(c)]
+        hs = round(sum(horas_de_horario(c.horario) or 0 for c in trab), 2)
+        por_semana.append({'semana': i, 'dias_trabajados': len(trab), 'horas': hs})
+
+    total = round(sum(s['horas'] for s in por_semana), 2)
+    n = len(por_semana) or 1
+    return {
+        'por_horario': por_horario,
+        'por_semana': por_semana,
+        'ciclo_total': total,
+        'promedio_semanal': round(total / n, 2),
+        'semanas_desiguales': len({s['horas'] for s in por_semana}) > 1,
+    }
 
 
 # ---------------------------------------------------------------------------

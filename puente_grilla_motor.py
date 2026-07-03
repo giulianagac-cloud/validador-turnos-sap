@@ -12,6 +12,7 @@ from typing import Optional
 from generador_grillas import (
     Grilla, calcular_fecha_referencia, DIAS_ORDEN,
     generar_rotativo, parse_detalle_rotativo, variante_a_indice,
+    calcular_horas_grilla,
 )
 from turnos_engine import MotorTurnos, calcular_tolerancia
 
@@ -253,6 +254,11 @@ def resolver_grilla(
         'periodico': resultado_periodico,
         'turno': resultado_turno,
         'fecha_referencia': fecha_ref,
+        # Desglose de horas de la grilla (por horario, por semana, total del
+        # ciclo). Informativo: mostrar SIEMPRE el valor exacto. La comparación
+        # contra lo declarado la agrega resolver_lote_rotativo (que tiene el
+        # dato del pedido); acá solo se calcula.
+        'horas': calcular_horas_grilla(grilla),
         'hay_revisar': hay_revisar,
         'notas': notas,
         'ok': not hay_revisar and motor is not None,
@@ -272,6 +278,91 @@ def _split_base_letra(codigo):
     if m:
         return (m.group(1), m.group(2))
     return (c, '')
+
+
+def _coincide(declarado, calculado):
+    """True/False si declarado coincide con calculado (tolerancia 0.001).
+    None si falta el valor declarado o no es numérico (no se puede validar)."""
+    if declarado is None or calculado is None:
+        return None
+    try:
+        return abs(float(declarado) - float(calculado)) < 0.001
+    except (TypeError, ValueError):
+        return None
+
+
+def _validar_horas_rotativo(declaradas_por_sem, semanas_map, horas_grilla):
+    """Compara las horas calculadas de la grilla contra lo declarado en el pedido.
+
+    declaradas_por_sem : {num_sem: {'diaria': x|None, 'semanal': x|None}}
+    semanas_map        : {num_sem: horario_canon}  (horario declarado de esa SEM)
+    horas_grilla       : bloque de calcular_horas_grilla (por_semana, etc.)
+
+    OBSERVA y REPORTA, no decide: marca coincide True/False/None y deja cada
+    diferencia como nota para que la usuaria la mire. Devuelve (validaciones, notas).
+    """
+    from generador_grillas import horas_de_horario
+    notas = []
+
+    # --- Diaria: por cada SEM, duración del horario vs. horas diarias declaradas
+    diaria = []
+    for num in sorted(semanas_map):
+        horario = semanas_map[num]
+        calc = horas_de_horario(horario)
+        decl = (declaradas_por_sem.get(num) or {}).get('diaria')
+        coincide = _coincide(decl, calc)
+        diaria.append({'sem': num, 'horario': horario,
+                       'declarado': decl, 'calculado': calc, 'coincide': coincide})
+        if coincide is False:
+            notas.append(
+                f'Horas diarias SEM {num}: el horario {horario} da {calc} h, '
+                f'pero el pedido declara {decl} h. Revisar.'
+            )
+
+    # --- Semanal: horas trabajadas de cada semana de la grilla vs. lo declarado.
+    # El declarado es por variante; en un rotativo prolijo todas declaran lo mismo.
+    declaradas_sem = {d['semanal'] for d in declaradas_por_sem.values()
+                      if d.get('semanal') is not None}
+    ref_sem = None
+    if len(declaradas_sem) == 1:
+        ref_sem = next(iter(declaradas_sem))
+    elif len(declaradas_sem) > 1:
+        notas.append(
+            'Las variantes declaran horas semanales distintas '
+            f'({", ".join(str(x) for x in sorted(declaradas_sem))}); '
+            'no se puede validar contra un único valor. Revisar.'
+        )
+
+    semanal = []
+    for s in horas_grilla['por_semana']:
+        coincide = _coincide(ref_sem, s['horas']) if ref_sem is not None else None
+        semanal.append({'semana': s['semana'], 'dias_trabajados': s['dias_trabajados'],
+                        'declarado': ref_sem, 'calculado': s['horas'], 'coincide': coincide})
+        if coincide is False:
+            notas.append(
+                f'Horas semanales Sem{s["semana"]}: la grilla suma {s["horas"]} h '
+                f'({s["dias_trabajados"]} días), el pedido declara {ref_sem} h. Revisar.'
+            )
+
+    if horas_grilla.get('semanas_desiguales'):
+        detalle = ', '.join(f'Sem{s["semana"]}={s["horas"]}h'
+                            for s in horas_grilla['por_semana'])
+        notas.append(
+            f'Las semanas del ciclo no cargan lo mismo ({detalle}). Suele pasar '
+            'cuando la rotación mezcla horarios de distinta duración; revisar a mano.'
+        )
+
+    validaciones = {
+        'diaria': diaria,
+        'semanal': semanal,
+        'ciclo_total': horas_grilla.get('ciclo_total'),
+        'promedio_semanal': horas_grilla.get('promedio_semanal'),
+        'semanas_desiguales': horas_grilla.get('semanas_desiguales', False),
+        # ok = ninguna comparación con dato declarado dio distinto (las que no
+        # se pudieron validar por falta de dato no cuentan como error).
+        'ok': all(x['coincide'] is not False for x in diaria + semanal),
+    }
+    return validaciones, notas
 
 
 def resolver_lote_rotativo(pedidos, motor, reservas=None):
@@ -304,6 +395,7 @@ def resolver_lote_rotativo(pedidos, motor, reservas=None):
     resultados = []
     for base, filas in grupos.items():
         semanas: dict = {}          # num_sem -> horario_canon
+        declaradas: dict = {}       # num_sem -> {'diaria':x|None, 'semanal':x|None}
         franco = None
         agrupador = None
         es_flex = False
@@ -320,6 +412,10 @@ def resolver_lote_rotativo(pedidos, motor, reservas=None):
             if pr:
                 num, horario = pr
                 semanas[num] = horario
+                declaradas[num] = {
+                    'diaria': p.get('horas_diarias_decl'),
+                    'semanal': p.get('horas_sem_decl'),
+                }
             else:
                 notas_grupo.append(
                     f'No se pudo leer "SEM N - HH:MM A HH:MM" en: '
@@ -351,6 +447,12 @@ def resolver_lote_rotativo(pedidos, motor, reservas=None):
             }
             for (letra, cod) in sorted(variantes)
         ]
+
+        # Chequeo formal de horas: calculado (grilla) vs. declarado (pedido).
+        # Informa/avisa, no bloquea (ok del turno sigue atado a hay_revisar).
+        val_horas, notas_horas = _validar_horas_rotativo(declaradas, semanas, r['horas'])
+        r['validaciones_horas'] = val_horas
+        r['notas'].extend(notas_horas)
 
         # Encadenar el correlativo de turno para el próximo grupo/lote
         if motor is not None and agrupador is not None:
