@@ -655,6 +655,82 @@ def test_flex_analisis_elegir():
 
 
 # ---------------------------------------------------------------------------
+# LOOKUP INVERSO — turno YA CREADO: leer su cadena real (turno → periódico →
+# diarios) desde las tablas, en vez de re-derivar del texto del pedido.
+# ---------------------------------------------------------------------------
+def _motor_existente():
+    import pandas as pd
+    from turnos_engine import MotorTurnos
+    m = MotorTurnos.__new__(MotorTurnos)
+    m.turnos = pd.DataFrame({
+        'Regla p.plan h.tbjo.':    ['LBS883', 'LBS885'],
+        'Agrup.para PHTD':         [34, 34],
+        'PHT por períodos':        ['BF22', 'BF24'],
+        'Fe.referencia PHTP':      ['2019-04-01 00:00:00', '2019-04-01 00:00:00'],
+        'Pto.arranque en PHTP':    ['1', '1'],
+        'Txt.reg.plan horar.tbjo.': ['FLEX 6 HRS NOC FSI', 'Lun a Sab de 13 a 19 FNO'],
+    })
+    dcols = ['Plan hor.tbjo.diario'] + [f'Plan hor.tbjo.diario.{i}' for i in range(1, 7)]
+    def fila(cod, dias):  # dias: lista de 7 (código o 'LIBR')
+        return dict(zip(dcols, dias))
+    m.periodicos = pd.DataFrame([
+        {'PHT por períodos': 'BF22', 'Número de semana': 1, 'Agrup.para PHTD': 34,
+         **fila('BF22', ['ZLFN', 'ZLFN', 'ZLFN', 'ZLFN', 'ZLFN', 'LIBR', 'LIBR'])},
+        {'PHT por períodos': 'BF24', 'Número de semana': 1, 'Agrup.para PHTD': 34,
+         **fila('BF24', ['B048', 'B048', 'B048', 'B048', 'B048', 'B048', 'LIBR'])},
+    ])
+    m.diarios = pd.DataFrame({
+        'Agrup.para PHTD':      [34, 34],
+        'Plan hor.tbjo.diario': ['ZLFN', 'B048'],
+        'Texto plan hr.tr.dia': ['Flex 6 hr NOC', '13:00 a 19:00'],
+        'Horas trabajo teór.':  ['6', '6'],
+    })
+    return m
+
+
+def test_turno_existente_flex():
+    print('\n' + '=' * 60)
+    print('LOOKUP INVERSO: LBS883 (FLEX) -> BF22 -> ZLFN, todo YA CREADO')
+    print('=' * 60)
+    m = _motor_existente()
+    r = m.resolver_turno_existente(34, 'LBS883')
+    print(f'  tipo={r["tipo"]} periodico={r["periodico"]["codigo"]} grilla={r["semanas_codigos"]}')
+    check(r is not None and r['tipo'] == 'existente', 'detecta el turno como existente')
+    check(r['ya_existe'] is True, 'marca ya_existe')
+    check(r['periodico']['codigo'] == 'BF22', 'periódico real BF22 (no re-derivado)')
+    check(r['semanas_codigos'] == [['ZLFN', 'ZLFN', 'ZLFN', 'ZLFN', 'ZLFN', 'LIBR', 'LIBR']],
+          'grilla real del periódico')
+    diarios = {v['codigo']: v['todos'][0]['texto'] for v in r['diarios'].values()}
+    check(diarios == {'ZLFN': 'Flex 6 hr NOC'}, 'diario real ZLFN con su texto SAP',
+          f'diarios={diarios}')
+    check(r['fecha_referencia']['fecha_referencia'] == '01.04.2019',
+          'Fe.referencia formateada dd.mm.yyyy')
+    check(r['turno']['estado'] == 'duplicado', 'turno marcado YA CREADO')
+
+
+def test_turno_existente_normal_evita_duplicado():
+    print('\n' + '=' * 60)
+    print('LOOKUP INVERSO: LBS885 -> BF24 (el real), no un periodico duplicado')
+    print('=' * 60)
+    m = _motor_existente()
+    r = m.resolver_turno_existente(34, 'LBS885')
+    check(r['periodico']['codigo'] == 'BF24',
+          'usa el periódico REAL del turno (BF24), no otro con la misma grilla')
+    check(list(r['diarios'].keys()) == ['13:00-19:00'],
+          'diario por rango canónico (13:00-19:00)',
+          f'keys={list(r["diarios"].keys())}')
+
+
+def test_turno_inexistente_devuelve_none():
+    print('\n' + '=' * 60)
+    print('LOOKUP INVERSO: turno NUEVO (no existe) -> None (sigue analisis normal)')
+    print('=' * 60)
+    m = _motor_existente()
+    check(m.resolver_turno_existente(34, 'LBS999') is None,
+          'turno inexistente devuelve None (va al flujo hacia adelante)')
+
+
+# ---------------------------------------------------------------------------
 # Ejecutar
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -672,6 +748,9 @@ if __name__ == '__main__':
     test_flex_candidatos_por_horas()
     test_flex_sin_match_ofrece_todos()
     test_flex_analisis_elegir()
+    test_turno_existente_flex()
+    test_turno_existente_normal_evita_duplicado()
+    test_turno_inexistente_devuelve_none()
 
     print('\n' + '=' * 60)
     print(f'RESULTADO: {PASS} PASS, {FAIL} FAIL')

@@ -15,10 +15,12 @@ function esRot(r: ResultadoGrilla | ResultadoRotativo): r is ResultadoRotativo {
   return (r as ResultadoRotativo).tipo === 'rotativo';
 }
 
-// '11:00-19:00' -> '11:00 a 19:00'
+// '11:00-19:00' -> '11:00 a 19:00'. Solo parte rangos horarios reales; un texto
+// FLEX ('Flex 36 - 6') se muestra tal cual.
 function horarioTexto(canon: string): string {
+  if (!/^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(canon)) return canon;
   const [ini, fin] = canon.split('-', 2);
-  return fin ? `${ini} a ${fin}` : canon;
+  return `${ini} a ${fin}`;
 }
 
 // Duración exacta de un rango, en horas (tolera cruce de medianoche). Solo para mostrar.
@@ -143,6 +145,8 @@ export default function GrillaResultado({
           : resultado.ok ? '#1A5C1A' : '#0A246A' }}>
         {resultado.parseError
           ? `⚠ ${tituloTurno} — no se pudo interpretar el horario`
+          : resultado.ya_existe
+          ? `✓ ${tituloTurno} — YA CREADO (cadena real de las tablas)`
           : resultado.flex
           ? `${tituloTurno} — FLEX: elegí el diario`
           : resultado.hay_revisar

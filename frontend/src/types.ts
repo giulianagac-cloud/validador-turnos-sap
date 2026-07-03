@@ -168,11 +168,13 @@ export interface ResultadoGrilla {
   hay_revisar: boolean;
   notas: string[];
   ok: boolean;
-  // Extensiones para renderizar tambien resultados SIMPLES/FLEX con este mismo
-  // diseño (via adaptador simpleToGrilla). Ausentes en los rotativos reales.
+  // Extensiones para renderizar tambien resultados SIMPLES/FLEX/YA-CREADO con este
+  // mismo diseño (via adaptador simpleToGrilla o lookup inverso). Ausentes en los
+  // rotativos reales.
   flex?: boolean;
   flexCandidatos?: DiarioDetalle[];
   parseError?: boolean;
+  ya_existe?: boolean;
 }
 
 // Datos crudos del pedido (fila del Excel) que se conservan en el frontend para
@@ -258,10 +260,22 @@ export interface ResultadoAnalisis {
   error?: string;
 }
 
-// Un resultado puede ser un análisis simple o un turno rotativo (grilla).
-// Se discrimina por la presencia de `tipo === 'rotativo'`.
-export type AnyResultado = ResultadoAnalisis | ResultadoRotativo;
+// Resultado de un turno que YA EXISTE, resuelto por lookup inverso desde las
+// tablas (turno → periódico real → diarios reales). Reusa la forma de grilla.
+export interface ResultadoExistente extends ResultadoGrilla {
+  tipo: 'existente';
+  ya_existe: true;
+  descripcion_real?: string;
+  descripcion_pedido?: string;
+}
+
+// Un resultado puede ser: análisis simple, turno rotativo, o turno ya existente.
+export type AnyResultado = ResultadoAnalisis | ResultadoRotativo | ResultadoExistente;
 
 export function esRotativo(r: AnyResultado): r is ResultadoRotativo {
   return (r as ResultadoRotativo).tipo === 'rotativo';
+}
+
+export function esExistente(r: AnyResultado): r is ResultadoExistente {
+  return (r as ResultadoExistente).tipo === 'existente';
 }
