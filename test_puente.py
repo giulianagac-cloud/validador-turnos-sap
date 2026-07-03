@@ -331,6 +331,44 @@ def test_bisagra_roca_martes():
 
 
 # ---------------------------------------------------------------------------
+# REGRESIÓN — periódico rotativo guardado ROTADO (caso real LR846 / R848).
+# SAP guarda el periódico arrancando por la otra semana del ciclo; el match
+# debe encontrarlo igual (probando rotaciones), no proponer crear.
+# ---------------------------------------------------------------------------
+def test_periodico_rotado():
+    print('\n' + '=' * 60)
+    print('REGRESIÓN: periódico rotativo guardado ROTADO (R848)')
+    print('=' * 60)
+
+    LIBR = 'LIBR'
+    sem_R055 = (LIBR, 'R055', 'R055', 'R055', 'R055', 'R055', 'R055')
+    sem_R175 = (LIBR, 'R175', 'R175', 'R175', 'R175', 'R175', 'R175')
+    # R848 guardado ROTADO: Sem1=R175, Sem2=R055 (al revés de lo que arma la app)
+    motor = MotorMock(
+        diarios_existentes={
+            (28, '11:00', '19:00'): 'R055',
+            (28, '03:00', '11:00'): 'R175',
+        },
+        periodicos_existentes={(28, (sem_R175, sem_R055)): 'R848'},
+        ultimo_diario=175, ultimo_periodico=847, ultimo_turno=845,
+    )
+    # App: franco Lunes, SEM1=11-19 (R055), SEM2=03-11 (R175)
+    grilla = generar_rotativo(['11:00-19:00', '03:00-11:00'], 'Lunes')
+    r = resolver_grilla(grilla, 28, 'LR846', 0, motor)
+
+    print(f'  semanas_codigos: {r["semanas_codigos"]}')
+    print(f'  periodico: accion={r["periodico"]["accion"]}, codigo={r["periodico"].get("codigo")}')
+    check(r['periodico']['accion'] == 'existe',
+          'periódico encontrado por rotación (no propone crear)',
+          f'FALLA: accion={r["periodico"]["accion"]} (esperaba existe)')
+    check(r['periodico'].get('codigo') == 'R848',
+          'periódico correcto: R848',
+          f'código incorrecto: {r["periodico"].get("codigo")}')
+    check(any('rotado' in n for n in r['notas']),
+          'nota de rotación presente')
+
+
+# ---------------------------------------------------------------------------
 # Ejecutar
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -338,6 +376,7 @@ if __name__ == '__main__':
     test_ld516()
     test_roca_rotativo()
     test_bisagra_roca_martes()
+    test_periodico_rotado()
 
     print('\n' + '=' * 60)
     print(f'RESULTADO: {PASS} PASS, {FAIL} FAIL')

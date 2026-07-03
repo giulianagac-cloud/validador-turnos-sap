@@ -24,6 +24,30 @@ def _split_horario(canon: str):
     return tuple(canon.split('-', 1))
 
 
+def _buscar_periodico_rotando(motor, agrupador, semanas_tuples):
+    """Busca un periódico multisemana tolerando la rotación del ciclo.
+
+    Un periódico rotativo es CÍCLICO: SAP puede tenerlo guardado arrancando por
+    cualquier semana del ciclo (la fase real la fija la Fe.referencia de cada
+    variante, no el periódico —A y B comparten un mismo periódico). Por eso, si
+    no coincide tal cual, probamos las N rotaciones de las semanas; si alguna
+    coincide, es el MISMO periódico.
+
+    Devuelve (ResultadoBusqueda, shift): shift = cuántas semanas hubo que rotar
+    para encontrarlo (0 = coincidió tal cual, o no existe).
+    """
+    rp = motor.buscar_periodico_multi(agrupador, semanas_tuples)
+    n = len(semanas_tuples)
+    if rp.existe or n <= 1:
+        return rp, 0
+    for shift in range(1, n):
+        rot = semanas_tuples[shift:] + semanas_tuples[:shift]
+        rp_rot = motor.buscar_periodico_multi(agrupador, rot)
+        if rp_rot.existe:
+            return rp_rot, shift
+    return rp, 0
+
+
 def resolver_grilla(
     grilla: Grilla,
     agrupador: int,
@@ -166,8 +190,9 @@ def resolver_grilla(
         semanas_tuples = [tuple(fila) for fila in semanas_codigos]
         if grilla.n_semanas == 1:
             rp = motor.buscar_periodico(agrupador, semanas_tuples[0])
+            shift = 0
         else:
-            rp = motor.buscar_periodico_multi(agrupador, semanas_tuples)
+            rp, shift = _buscar_periodico_rotando(motor, agrupador, semanas_tuples)
 
         if rp.existe:
             resultado_periodico = {
@@ -177,6 +202,12 @@ def resolver_grilla(
                 'duplicado': rp.duplicado,
                 'notas': rp.notas,
             }
+            if shift:
+                notas.append(
+                    f'Periódico {rp.codigos[0][0]}: SAP lo tiene guardado arrancando por '
+                    f'otra semana del ciclo (rotado {shift}). Es el MISMO periódico; la '
+                    f'fase la fija la fecha de referencia de cada variante.'
+                )
             if rp.duplicado:
                 notas.append(
                     f'Periódico DUPLICADO: {", ".join(c[0] for c in rp.codigos)}. '
