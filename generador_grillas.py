@@ -242,6 +242,49 @@ def generar_rotativo(horarios_semana: list, dia_franco: str) -> Grilla:
 
 
 # ---------------------------------------------------------------------------
+# Deteccion y parseo del formato ROTATIVO del pedido de RRHH
+# El DETALLE HORARIO viene tipo "SEM 1 - 11:00 A 19:00" (numero de semana del
+# ciclo + rango), SIN el dia (el dia franco esta en la columna FRANCO aparte).
+# ---------------------------------------------------------------------------
+_RE_SEM = re.compile(r'sem\w*\s*(\d+)', re.I)
+
+
+def parse_detalle_rotativo(texto: str):
+    """'SEM 1 - 11:00 A 19:00' -> (1, '11:00-19:00'). None si no matchea el patron.
+
+    Devuelve (numero_de_semana, horario_canonico). El numero de semana indica
+    en que semana del ciclo aplica ese horario. El dia NO sale de aca (va en la
+    columna FRANCO).
+    """
+    if texto is None:
+        return None
+    t = _norm(texto)
+    m_sem = _RE_SEM.search(t)
+    if not m_sem:
+        return None
+    semana = int(m_sem.group(1))
+    # aislar el rango: lo que viene despues de "SEM N" (evita que el N se
+    # confunda con un horario)
+    resto = t[m_sem.end():]
+    horario = _parsear_horario_segmento(resto)
+    if not horario:
+        return None
+    return (semana, horario)
+
+
+def es_pedido_rotativo(descripcion, detalle) -> bool:
+    """Un pedido es rotativo si la descripcion arranca/contiene 'ROT' o el
+    detalle horario trae el patron 'SEM N'. Señales elegidas con la usuaria."""
+    desc = _norm(descripcion or '')
+    det = _norm(detalle or '')
+    if re.search(r'\brot', desc):        # "ROT TPTE 26", "ROTATIVO"
+        return True
+    if _RE_SEM.search(det):              # "SEM 1 - 11:00 A 19:00"
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Anclaje temporal: fecha de referencia + punto de arranque
 # Verificado en datos: base FIJA 01/04/2019 (lunes). Cada variante corre la
 # fecha de referencia segun en que semana/dia del ciclo arranca.

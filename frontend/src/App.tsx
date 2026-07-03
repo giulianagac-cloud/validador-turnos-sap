@@ -3,8 +3,10 @@ import TablasLoader from './components/TablasLoader';
 import PedidoForm from './components/PedidoForm';
 import GeneradorGrilla from './components/GeneradorGrilla';
 import ResultadoCard from './components/ResultadoCard';
+import GrillaResultado from './components/GrillaResultado';
 import LoginScreen from './components/LoginScreen';
-import type { TablasState, ResultadoAnalisis } from './types';
+import type { TablasState, AnyResultado } from './types';
+import { esRotativo } from './types';
 import { estadoTablas, whoami } from './api';
 import { formatLoadTime, formatElapsed } from './utils';
 
@@ -18,7 +20,7 @@ export default function App() {
   const [authState, setAuthState] = useState<AuthState>('checking');
   const [tab, setTab] = useState<Tab>('tablas');
   const [tablas, setTablas] = useState<TablasState | null>(null);
-  const [resultados, setResultados] = useState<ResultadoAnalisis[]>([]);
+  const [resultados, setResultados] = useState<AnyResultado[]>([]);
   const [statusMsg, setStatusMsg] = useState('Consultando estado del servidor...');
   const [statusType, setStatusType] = useState<'ok' | 'error' | 'info'>('info');
 
@@ -220,7 +222,9 @@ export default function App() {
             </div>
           )}
           {resultados.map((r, i) => (
-            <ResultadoCard key={i} resultado={r} />
+            esRotativo(r)
+              ? <GrillaResultado key={i} resultado={r} />
+              : <ResultadoCard key={i} resultado={r} />
           ))}
         </div>
       </div>

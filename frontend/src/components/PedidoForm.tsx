@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { analizar, cargarPedido, listarSolapas } from '../api';
-import type { PedidoCargado, PedidoIn, TablasState, ResultadoAnalisis } from '../types';
+import type { AnyResultado, PedidoCargado, PedidoIn, TablasState } from '../types';
 import { formatElapsed } from '../utils';
 
 const AGRUPADORES = [
@@ -27,6 +27,7 @@ interface FormRow {
   codigo: string;
   descripcion: string;
   detalle_horario: string;
+  franco: string;   // día franco (para turnos rotativos; viene de la columna FRANCO)
   agrupador: string; // '' = sin asignar (prefijo ambiguo o sin código)
   horas_diarias_decl: string;
   horas_sem_decl: string;
@@ -39,6 +40,7 @@ const makeRow = (): FormRow => ({
   codigo: '',
   descripcion: '',
   detalle_horario: '',
+  franco: '',
   agrupador: '20',
   horas_diarias_decl: '',
   horas_sem_decl: '',
@@ -52,6 +54,7 @@ function fromImportado(p: PedidoCargado): FormRow {
     codigo: p.codigo ?? '',
     descripcion: p.descripcion ?? '',
     detalle_horario: p.detalle_horario ?? '',
+    franco: p.franco ?? '',
     agrupador: p.agrupador != null ? String(p.agrupador) : '',
     horas_diarias_decl: p.horas_diarias_decl != null ? String(p.horas_diarias_decl) : '',
     horas_sem_decl: p.horas_sem_decl != null ? String(p.horas_sem_decl) : '',
@@ -63,7 +66,7 @@ function fromImportado(p: PedidoCargado): FormRow {
 interface Props {
   tablasState: TablasState | null;
   staleHours: number;
-  onResultados: (r: ResultadoAnalisis[]) => void;
+  onResultados: (r: AnyResultado[]) => void;
   onError: (msg: string) => void;
   onGoToTablas: () => void;
 }
@@ -153,6 +156,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
       horas_sem_decl: r.horas_sem_decl ? parseFloat(r.horas_sem_decl) : null,
       horas_men_decl: r.horas_men_decl,
       es_flex: r.es_flex,
+      franco: r.franco.trim() || null,
     }));
     const invalid = pedidos.filter(p => !p.codigo || !p.detalle_horario);
     if (invalid.length > 0) {
@@ -346,7 +350,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
           )}
 
           <div style={{ overflowX: 'auto' }}>
-            <table className="alv-table" style={{ minWidth: 920 }}>
+            <table className="alv-table" style={{ minWidth: 1010 }}>
               <thead>
                 <tr>
                   <th style={{ width: 28, textAlign: 'center' }}>#</th>
@@ -355,6 +359,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
                   <th style={{ width: 240 }}>
                     Detalle Horario <span style={{ color: '#CC0000' }}>*</span>
                   </th>
+                  <th style={{ width: 90 }}>Franco</th>
                   <th style={{ width: 155 }}>Agrupador <span style={{ color: '#CC0000' }}>*</span></th>
                   <th style={{ width: 75 }}>H. Diarias</th>
                   <th style={{ width: 75 }}>H. Semanales</th>
@@ -401,6 +406,16 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
                           value={row.detalle_horario}
                           onChange={e => update(row.id, 'detalle_horario', e.target.value)}
                           placeholder="ej. L a V 07:00 a 13:00 FSI"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="sap-input"
+                          style={{ width: '100%' }}
+                          value={row.franco}
+                          onChange={e => update(row.id, 'franco', e.target.value)}
+                          placeholder="ej. Lunes"
+                          title="Día franco (rotativos)"
                         />
                       </td>
                       <td>

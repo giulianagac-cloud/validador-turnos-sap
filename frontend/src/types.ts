@@ -7,6 +7,8 @@ export interface PedidoIn {
   horas_sem_decl?: number | null;
   horas_men_decl?: number | null;
   es_flex: boolean;
+  franco?: string | null;
+  rotativo?: boolean;
 }
 
 export interface TablasStatus {
@@ -174,7 +176,9 @@ export interface PedidoCargado {
   horas_sem_decl: number | null;
   horas_men_decl: number | null;
   feriados: string | null;
+  franco: string | null;
   agrupador: number | null;
+  rotativo: boolean;
   hoja: string;
 }
 
@@ -182,6 +186,21 @@ export interface CargarPedidoResponse {
   ok: boolean;
   n_pedidos: number;
   pedidos: PedidoCargado[];
+}
+
+// Resultado de un turno ROTATIVO multisemana (subido del Excel). Reusa la forma
+// de ResultadoGrilla y agrega las variantes A/B con su fecha de referencia.
+export interface VarianteRotativa {
+  codigo: string;
+  variante: string;
+  fecha_referencia: FechaReferencia;
+}
+
+export interface ResultadoRotativo extends ResultadoGrilla {
+  tipo: 'rotativo';
+  codigo_base: string;
+  franco: string | null;
+  variantes: VarianteRotativa[];
 }
 
 export interface ResultadoAnalisis {
@@ -216,4 +235,12 @@ export interface ResultadoAnalisis {
   notas: string[];
   ok: boolean;
   error?: string;
+}
+
+// Un resultado puede ser un análisis simple o un turno rotativo (grilla).
+// Se discrimina por la presencia de `tipo === 'rotativo'`.
+export type AnyResultado = ResultadoAnalisis | ResultadoRotativo;
+
+export function esRotativo(r: AnyResultado): r is ResultadoRotativo {
+  return (r as ResultadoRotativo).tipo === 'rotativo';
 }

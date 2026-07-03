@@ -58,6 +58,19 @@ turno, tolerancia, cuadrito, notas, ok`.
   Diaria = duración del rango. Semanal = diaria × días trabajados (sin contar francos).
 - **Parser de horario**: tolera forma corta ("L a V") y larga ("LUNES A VIERNES"),
   con/sin "hs", FSI/FNO, y cruce de medianoche ("23:00 a 05:00").
+- **Turno ROTATIVO multisemana** (ej. ROCA TPTE 26): tipo de horario donde el
+  `DETALLE HORARIO` viene como `"SEM N - HH:MM A HH:MM"` (número de semana del
+  ciclo + rango), SIN el día adentro. El **día franco sale de la columna FRANCO**,
+  no del texto. Cada día de la semana genera su turno (LR846=Lunes … LR852=Domingo)
+  y **cada turno lleva un código por rotación**: `LR846A` entra en SEM 1, `LR846B`
+  en SEM 2. A y B son el **mismo turno/periódico** (misma grilla) y solo cambian la
+  **fecha de referencia** (punto de arranque del ciclo). La grilla usa el patrón de
+  "bisagra" ya en `generador_grillas.py::generar_rotativo` (días después del franco
+  usan el horario de esa semana; días antes, el de la semana anterior). Detección:
+  DESCRIPCIÓN contiene "ROT" **o** DETALLE matchea `SEM N`. Al subir el Excel, estos
+  pedidos se rutean al generador de grillas (`puente_grilla_motor.resolver_lote_rotativo`),
+  NO al analizador simple; los correlativos de diario/periódico/turno se encadenan
+  con un `reservas` compartido en todo el lote.
 
 ## Seguridad (requisito — es para mostrar a dirección)
 
@@ -69,8 +82,12 @@ turno, tolerancia, cuadrito, notas, ok`.
 ## Estado / pendientes
 
 - Motor: completo y probado (parser, tolerancia, diario, periódico, correlativos, turno).
-- Pendiente a futuro: chequeo de horas para periódicos rotativos multisemana; afinar
-  matcheo FLEX con más casos; carga directa del Excel de pedido de RRHH.
+- Turnos rotativos multisemana: soportados al subir el Excel (detección + grilla de
+  bisagra + correlativos encadenados + variantes A/B con fecha de referencia).
+  Verificado contra ROCA TPTE 26.
+- Pendiente a futuro: **chequeo formal de horas** para rotativos multisemana (hoy no
+  se valida; 6 días × 8h = 48 cierra a mano); ciclos de 3+ semanas (el diseño lo
+  soporta pero solo se probó con 2); afinar matcheo FLEX con más casos.
 
 ## Convenciones
 

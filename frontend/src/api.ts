@@ -1,6 +1,6 @@
 import type {
-  CargarPedidoResponse, EstadoTablas, GenerarTurnoInput, PedidoIn,
-  ResultadoAnalisis, ResultadoGrilla, TablasStatus, WhoAmI,
+  AnyResultado, CargarPedidoResponse, EstadoTablas, GenerarTurnoInput, PedidoIn,
+  ResultadoGrilla, TablasStatus, WhoAmI,
 } from './types';
 
 // Ruta relativa por defecto: funciona servido desde el backend (mismo origen).
@@ -27,7 +27,7 @@ export async function cargarTablas(
 
 export async function analizar(
   pedidos: PedidoIn[],
-): Promise<{ resultados: ResultadoAnalisis[] }> {
+): Promise<{ resultados: AnyResultado[] }> {
   const res = await fetch(`${BASE}/analizar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

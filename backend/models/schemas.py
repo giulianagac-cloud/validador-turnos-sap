@@ -11,6 +11,8 @@ class PedidoIn(BaseModel):
     horas_sem_decl: Optional[float] = None
     horas_men_decl: Optional[float] = None
     es_flex: bool = False
+    franco: Optional[str] = None      # día franco (columna FRANCO) — turnos rotativos
+    rotativo: bool = False            # informativo; el backend re-detecta igual
 
 
 class AnalisisRequest(BaseModel):

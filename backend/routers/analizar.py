@@ -14,6 +14,7 @@ from .. import storage_backend
 from ..auth import requerir_sesion
 from ..models.schemas import AnalisisRequest, GenerarTurnoRequest
 from turnos_engine import MotorTurnos
+from generador_grillas import es_pedido_rotativo
 
 # Todas las rutas de este router requieren sesión iniciada (no-op en local/.exe,
 # solo se exige de verdad cuando corre en Vercel — ver backend/auth.py).
@@ -110,8 +111,12 @@ async def analizar(req: AnalisisRequest):
             status_code=400,
             detail="Primero cargá los 3 Excels de SAP en la pantalla de Carga de Tablas.",
         )
-    pedidos_dicts = [
-        {
+    # Separar pedidos simples de rotativos (re-detectamos en el backend para no
+    # depender del flag del frontend). Los rotativos multisemana no los entiende
+    # el analizador simple: van por el generador de grillas.
+    simples, rotativos = [], []
+    for p in req.pedidos:
+        base = {
             'codigo': p.codigo,
             'descripcion': p.descripcion,
             'detalle_horario': p.detalle_horario,
@@ -121,20 +126,32 @@ async def analizar(req: AnalisisRequest):
             'horas_men_decl': p.horas_men_decl,
             'es_flex': p.es_flex,
         }
-        for p in req.pedidos
-    ]
-    resultados = _motor.analizar_lote(pedidos_dicts)
+        if es_pedido_rotativo(p.descripcion, p.detalle_horario):
+            base['franco'] = p.franco
+            rotativos.append(base)
+        else:
+            simples.append(base)
 
-    # Datos para completar en SAP al crear el periódico (Fe.referencia PHTP /
-    # Pto.arranque en PHTP): mismo cálculo que ya usa el Generador de Grilla,
-    # acá para el caso simple (1 semana, sin rotación -> variante base "A").
     from generador_grillas import calcular_fecha_referencia
-    for r in resultados:
-        periodico = r.get('periodico') or {}
-        if periodico.get('accion') == 'crear':
-            ref = calcular_fecha_referencia(0)
-            periodico['fecha_referencia'] = ref['fecha_referencia']
-            periodico['punto_arranque'] = ref['punto_arranque']
+    resultados = []
+
+    # --- Pedidos simples: analizador clásico ---
+    if simples:
+        res_simples = _motor.analizar_lote(simples)
+        # Datos para completar en SAP al crear el periódico (Fe.referencia PHTP /
+        # Pto.arranque en PHTP): variante base "A".
+        for r in res_simples:
+            periodico = r.get('periodico') or {}
+            if periodico.get('accion') == 'crear':
+                ref = calcular_fecha_referencia(0)
+                periodico['fecha_referencia'] = ref['fecha_referencia']
+                periodico['punto_arranque'] = ref['punto_arranque']
+        resultados.extend(res_simples)
+
+    # --- Pedidos rotativos: generador de grillas multisemana ---
+    if rotativos:
+        from puente_grilla_motor import resolver_lote_rotativo
+        resultados.extend(resolver_lote_rotativo(rotativos, _motor))
 
     return JSONResponse(content={"resultados": [_sanitize(r) for r in resultados]})
 
@@ -222,21 +239,25 @@ async def cargar_pedido(
             c_hs_sem   = _buscar_col(cols, "horas", "sem")
             c_hs_men   = _buscar_col(cols, "horas", "men")
             c_feriado  = _buscar_col(cols, "feriado")
+            c_franco   = _buscar_col(cols, "franco")
 
             for _, fila in df.iterrows():
                 detalle = fila.get(c_detalle) if c_detalle else None
                 # saltar filas sin detalle horario (vacías)
                 if detalle is None or (isinstance(detalle, float) and math.isnan(detalle)):
                     continue
+                descripcion = fila.get(c_desc) if c_desc else None
                 pedidos.append(_sanitize({
                     "codigo":             fila.get(c_codigo) if c_codigo else None,
-                    "descripcion":        fila.get(c_desc) if c_desc else None,
+                    "descripcion":        descripcion,
                     "detalle_horario":    detalle,
                     "horas_diarias_decl": fila.get(c_hs_dia) if c_hs_dia else None,
                     "horas_sem_decl":     fila.get(c_hs_sem) if c_hs_sem else None,
                     "horas_men_decl":     fila.get(c_hs_men) if c_hs_men else None,
                     "feriados":           fila.get(c_feriado) if c_feriado else None,
+                    "franco":             fila.get(c_franco) if c_franco else None,
                     "agrupador":          _deducir_agrupador(fila.get(c_codigo) if c_codigo else None),
+                    "rotativo":           es_pedido_rotativo(descripcion, detalle),
                     "hoja":               hoja,
                 }))
 

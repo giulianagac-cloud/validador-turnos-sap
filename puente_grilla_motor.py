@@ -6,9 +6,13 @@ devolviendo todo lo necesario para cargar el turno en SAP.
 
 Filosofía: OBSERVA y PROPONE. Nunca elige por el usuario ante ambigüedad.
 """
+import re
 from typing import Optional
 
-from generador_grillas import Grilla, calcular_fecha_referencia, DIAS_ORDEN
+from generador_grillas import (
+    Grilla, calcular_fecha_referencia, DIAS_ORDEN,
+    generar_rotativo, parse_detalle_rotativo, variante_a_indice,
+)
 from turnos_engine import MotorTurnos, calcular_tolerancia
 
 CODIGO_FRANCO = 'LIBR'
@@ -27,6 +31,8 @@ def resolver_grilla(
     indice_variante: int = 0,
     motor: Optional[MotorTurnos] = None,
     es_flex: bool = False,
+    reservas: Optional[dict] = None,
+    diarios_previos: Optional[dict] = None,
 ) -> dict:
     """
     Resuelve una Grilla contra el motor, devolviendo un dict JSON-serializable.
@@ -38,8 +44,16 @@ def resolver_grilla(
     indice_variante : 0=A, 1=B, 2=C — para calcular la fecha de referencia SAP
     motor           : instancia de MotorTurnos con las tablas SAP cargadas
     es_flex         : afecta qué familia de diario/periódico se usa
+    reservas        : dict de reservas de correlativos COMPARTIDO entre varias
+                      llamadas (para encadenar diario/periódico/turno en un lote).
+                      Si es None se usa uno interno (comportamiento original).
+    diarios_previos : dict {horario_canon -> resultado} COMPARTIDO entre grillas
+                      del mismo lote, para no re-proponer un diario ya resuelto en
+                      otra grilla. Si es None se usa uno interno.
     """
     notas = list(grilla.notas)
+    if reservas is None:
+        reservas = {}
 
     # -----------------------------------------------------------------------
     # 1. Recolectar horarios únicos a través de todas las semanas
@@ -55,13 +69,14 @@ def resolver_grilla(
     #    Reservas intra-grilla: N diarios nuevos en la misma grilla reciben
     #    correlativos consecutivos, no el mismo número repetido.
     # -----------------------------------------------------------------------
-    diarios_por_horario: dict = {}
+    diarios_por_horario: dict = diarios_previos if diarios_previos is not None else {}
     acciones_diario: list = []
-    reservas_intra: dict = {}
 
     if motor is not None:
         familia_diario = motor.familia_objetivo('diario', agrupador, es_flex)
         for horario in sorted(horarios_unicos):
+            if horario in diarios_por_horario:
+                continue   # ya resuelto en otra grilla del mismo lote
             ini, fin = _split_horario(horario)
             rb = motor.buscar_diario(agrupador, ini, fin)
             if rb.existe:
@@ -79,7 +94,7 @@ def resolver_grilla(
                         + '. Se usa el primero; confirmar.'
                     )
             else:
-                prop = motor.proponer_correlativo('diario', agrupador, familia_diario, reservas_intra)
+                prop = motor.proponer_correlativo('diario', agrupador, familia_diario, reservas)
                 codigo_prop = prop['propuesto']
                 tol = calcular_tolerancia(ini, fin)
                 diarios_por_horario[horario] = {
@@ -96,8 +111,8 @@ def resolver_grilla(
                     'detalle': prop,
                     'tolerancia': tol,
                 })
-                # Reservar para que el siguiente diario de esta misma grilla tome el siguiente número
-                motor._registrar_reserva(reservas_intra, 'diario', agrupador, codigo_prop)
+                # Reservar para que el siguiente diario (de esta grilla o del lote) tome el siguiente número
+                motor._registrar_reserva(reservas, 'diario', agrupador, codigo_prop)
     else:
         notas.append('Motor no disponible — diarios no resueltos.')
         for horario in sorted(horarios_unicos):
@@ -166,19 +181,21 @@ def resolver_grilla(
                 )
         else:
             familia_per = motor.familia_objetivo('periodico', agrupador, es_flex)
-            prop = motor.proponer_correlativo('periodico', agrupador, familia_per)
+            prop = motor.proponer_correlativo('periodico', agrupador, familia_per, reservas)
             resultado_periodico = {
                 'accion': 'crear',
                 'codigo_propuesto': prop['propuesto'],
                 'familia': familia_per,
                 'detalle': prop,
             }
+            # Reservar para que el siguiente periódico del lote tome el siguiente número
+            motor._registrar_reserva(reservas, 'periodico', agrupador, prop['propuesto'])
 
     # -----------------------------------------------------------------------
     # 5. Validar correlativo de turno
     # -----------------------------------------------------------------------
     resultado_turno = (
-        motor.validar_correlativo_turno(agrupador, codigo_turno)
+        motor.validar_correlativo_turno(agrupador, codigo_turno, reservas)
         if motor is not None
         else {'estado': 'sin_motor', 'nota': 'Motor no disponible.'}
     )
@@ -206,3 +223,105 @@ def resolver_grilla(
         'notas': notas,
         'ok': not hay_revisar and motor is not None,
     }
+
+
+# ===========================================================================
+# Lote ROTATIVO: puente entre el Excel de pedido y el generador de grillas
+# ===========================================================================
+def _split_base_letra(codigo):
+    """'LR846A' -> ('LR846','A'); 'LR846-A' -> ('LR846','A'); 'LR846' -> ('LR846','').
+    El sufijo de letra identifica la variante/rotación (A=entra en SEM1, B en SEM2...)."""
+    if not codigo:
+        return (codigo, '')
+    c = str(codigo).strip()
+    m = re.match(r'^([A-Za-z]+\d+)-?([A-Za-z]+)$', c)
+    if m:
+        return (m.group(1), m.group(2))
+    return (c, '')
+
+
+def resolver_lote_rotativo(pedidos, motor, reservas=None):
+    """Resuelve un lote de pedidos ROTATIVOS multisemana subidos del Excel.
+
+    pedidos: lista de dicts con keys codigo, descripcion, detalle_horario,
+             agrupador, franco (día de la columna FRANCO), es_flex (opt).
+    reservas: dict de reservas COMPARTIDO (para encadenar correlativos con el
+              resto del lote —simples y rotativos—). Si es None se crea uno.
+
+    Agrupa por código base (LR846A/LR846B -> LR846 = un turno de un día franco),
+    arma horarios_semana ordenado por número de SEM, construye la grilla rotativa
+    con generar_rotativo() y la resuelve con resolver_grilla(). A y B comparten
+    diarios y periódico; solo cambian la fecha de referencia (punto de arranque).
+
+    Devuelve una lista de resultados (uno por código base), cada uno con
+    tipo='rotativo', la grilla de N semanas, y la lista de variantes A/B con su
+    fecha de referencia.
+    """
+    if reservas is None:
+        reservas = {}
+    diarios_previos: dict = {}   # horario_canon -> resultado, compartido en el lote
+
+    # 1. Agrupar por código base, preservando orden de aparición
+    grupos: dict = {}
+    for p in pedidos:
+        base, letra = _split_base_letra(p.get('codigo'))
+        grupos.setdefault(base, []).append((letra, p))
+
+    resultados = []
+    for base, filas in grupos.items():
+        semanas: dict = {}          # num_sem -> horario_canon
+        franco = None
+        agrupador = None
+        es_flex = False
+        variantes = []              # (letra, codigo_completo)
+        notas_grupo = []
+
+        for letra, p in filas:
+            if franco is None:
+                franco = p.get('franco')
+            if agrupador is None:
+                agrupador = p.get('agrupador')
+            es_flex = es_flex or bool(p.get('es_flex'))
+            pr = parse_detalle_rotativo(p.get('detalle_horario'))
+            if pr:
+                num, horario = pr
+                semanas[num] = horario
+            else:
+                notas_grupo.append(
+                    f'No se pudo leer "SEM N - HH:MM A HH:MM" en: '
+                    f'"{p.get("detalle_horario")}" -> REVISAR MANUAL'
+                )
+            variantes.append((letra, p.get('codigo')))
+
+        horarios_semana = [semanas[k] for k in sorted(semanas)]
+
+        # Construir y resolver la grilla rotativa (variante base = índice 0)
+        grilla = generar_rotativo(horarios_semana, franco or '')
+        grilla.notas.extend(notas_grupo)
+        r = resolver_grilla(
+            grilla, agrupador, base, 0, motor, es_flex,
+            reservas=reservas, diarios_previos=diarios_previos,
+        )
+
+        # Fechas de referencia por variante A/B (comparten diario/periódico)
+        r['tipo'] = 'rotativo'
+        r['codigo_base'] = base
+        r['franco'] = franco
+        r['variantes'] = [
+            {
+                'codigo': cod,
+                'variante': letra,
+                'fecha_referencia': calcular_fecha_referencia(
+                    variante_a_indice(letra[:1]) if letra else 0
+                ),
+            }
+            for (letra, cod) in sorted(variantes)
+        ]
+
+        # Encadenar el correlativo de turno para el próximo grupo/lote
+        if motor is not None and agrupador is not None:
+            motor._registrar_reserva(reservas, 'turno', agrupador, base)
+
+        resultados.append(r)
+
+    return resultados
