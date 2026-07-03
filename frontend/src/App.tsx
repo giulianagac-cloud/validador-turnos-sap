@@ -5,7 +5,7 @@ import GeneradorGrilla from './components/GeneradorGrilla';
 import ResultadoCard from './components/ResultadoCard';
 import GrillaResultado from './components/GrillaResultado';
 import LoginScreen from './components/LoginScreen';
-import type { TablasState, AnyResultado } from './types';
+import type { TablasState, AnyResultado, PedidoDisplay } from './types';
 import { esRotativo } from './types';
 import { estadoTablas, whoami } from './api';
 import { formatLoadTime, formatElapsed } from './utils';
@@ -21,6 +21,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('tablas');
   const [tablas, setTablas] = useState<TablasState | null>(null);
   const [resultados, setResultados] = useState<AnyResultado[]>([]);
+  const [pedidos, setPedidos] = useState<PedidoDisplay[]>([]);
   const [statusMsg, setStatusMsg] = useState('Consultando estado del servidor...');
   const [statusType, setStatusType] = useState<'ok' | 'error' | 'info'>('info');
 
@@ -107,6 +108,12 @@ export default function App() {
   const isStale = tablas
     ? Date.now() - tablas.loadedAt > STALE_HOURS * 3600 * 1000
     : false;
+
+  // Índice código → datos del Excel, para unir cada turno con su fila original.
+  const pedidosPorCodigo: Record<string, PedidoDisplay> = {};
+  for (const p of pedidos) {
+    if (p.codigo) pedidosPorCodigo[p.codigo] = p;
+  }
 
   return (
     <div className="app-root">
@@ -197,8 +204,9 @@ export default function App() {
           <PedidoForm
             tablasState={tablas}
             staleHours={STALE_HOURS}
-            onResultados={(r) => {
+            onResultados={(r, p) => {
               setResultados(r);
+              setPedidos(p);
               setStatus(`Análisis completado: ${r.length} pedido(s) procesado(s).`, 'ok');
               setTab('resultados');
             }}
@@ -223,7 +231,7 @@ export default function App() {
           )}
           {resultados.map((r, i) => (
             esRotativo(r)
-              ? <GrillaResultado key={i} resultado={r} />
+              ? <GrillaResultado key={i} resultado={r} pedidos={pedidosPorCodigo} />
               : <ResultadoCard key={i} resultado={r} />
           ))}
         </div>

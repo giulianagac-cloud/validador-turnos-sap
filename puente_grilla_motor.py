@@ -86,6 +86,9 @@ def resolver_grilla(
                     'todos': [{'codigo': c, 'texto': o, 'horas': h} for c, o, h in rb.codigos],
                     'duplicado': rb.duplicado,
                     'notas': rb.notas,
+                    # Tolerancia también para los diarios que ya existen (para mostrarla
+                    # en la visual junto al horario; no cambia ninguna decisión).
+                    'tolerancia': calcular_tolerancia(ini, fin),
                 }
                 if rb.duplicado:
                     notas.append(

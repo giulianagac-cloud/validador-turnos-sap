@@ -168,6 +168,19 @@ export interface ResultadoGrilla {
   ok: boolean;
 }
 
+// Datos crudos del pedido (fila del Excel) que se conservan en el frontend para
+// mostrarlos al costado de cada turno en el resultado (descripción, detalle,
+// franco, horas, feriados). No viajan al backend; se unen por código.
+export interface PedidoDisplay {
+  codigo: string;
+  descripcion: string;
+  detalle_horario: string;
+  franco: string;
+  horas_diarias_decl: string;
+  horas_sem_decl: string;
+  feriados: string;
+}
+
 export interface PedidoCargado {
   codigo: string | null;
   descripcion: string | null;

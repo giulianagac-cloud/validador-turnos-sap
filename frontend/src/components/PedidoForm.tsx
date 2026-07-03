@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { analizar, cargarPedido, listarSolapas } from '../api';
-import type { AnyResultado, PedidoCargado, PedidoIn, TablasState } from '../types';
+import type { AnyResultado, PedidoCargado, PedidoDisplay, PedidoIn, TablasState } from '../types';
 import { formatElapsed } from '../utils';
 
 const AGRUPADORES = [
@@ -32,6 +32,7 @@ interface FormRow {
   horas_diarias_decl: string;
   horas_sem_decl: string;
   horas_men_decl: number | null; // solo se completa desde import Excel
+  feriados: string;  // eco del Excel (SI/NO); solo se muestra en el resultado
   es_flex: boolean;
 }
 
@@ -45,6 +46,7 @@ const makeRow = (): FormRow => ({
   horas_diarias_decl: '',
   horas_sem_decl: '',
   horas_men_decl: null,
+  feriados: '',
   es_flex: false,
 });
 
@@ -59,6 +61,7 @@ function fromImportado(p: PedidoCargado): FormRow {
     horas_diarias_decl: p.horas_diarias_decl != null ? String(p.horas_diarias_decl) : '',
     horas_sem_decl: p.horas_sem_decl != null ? String(p.horas_sem_decl) : '',
     horas_men_decl: p.horas_men_decl ?? null,
+    feriados: p.feriados ?? '',
     es_flex: esFlexPorPrefijo(p.codigo),
   };
 }
@@ -66,7 +69,7 @@ function fromImportado(p: PedidoCargado): FormRow {
 interface Props {
   tablasState: TablasState | null;
   staleHours: number;
-  onResultados: (r: AnyResultado[]) => void;
+  onResultados: (r: AnyResultado[], pedidos: PedidoDisplay[]) => void;
   onError: (msg: string) => void;
   onGoToTablas: () => void;
 }
@@ -166,11 +169,23 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
     return pedidos;
   };
 
+  // Eco de los datos del Excel para mostrar al costado de cada turno en el
+  // resultado (se unen por código; no viajan al backend).
+  const buildDisplay = (): PedidoDisplay[] => rows.map(r => ({
+    codigo: r.codigo.trim(),
+    descripcion: r.descripcion.trim(),
+    detalle_horario: r.detalle_horario.trim(),
+    franco: r.franco.trim(),
+    horas_diarias_decl: r.horas_diarias_decl,
+    horas_sem_decl: r.horas_sem_decl,
+    feriados: r.feriados,
+  }));
+
   const executeAnalisis = async (pedidos: PedidoIn[]) => {
     setLoading(true);
     try {
       const result = await analizar(pedidos);
-      onResultados(result.resultados);
+      onResultados(result.resultados, buildDisplay());
     } catch (e: unknown) {
       onError(e instanceof Error ? e.message : String(e));
     } finally {
