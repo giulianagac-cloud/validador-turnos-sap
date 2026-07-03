@@ -49,6 +49,57 @@ def _buscar_periodico_rotando(motor, agrupador, semanas_tuples):
     return rp, 0
 
 
+def _tuples_desde_layout(semanas_layout, eleccion):
+    """Arma las tuplas de códigos de la grilla a partir del layout y una elección
+    concreta de código por horario. Cada celda del layout es:
+      ('lit', codigo)  -> celda fija (LIBR o REVISAR)
+      ('h', horario)   -> celda de trabajo; toma el código elegido para ese horario
+    """
+    filas = []
+    for fila in semanas_layout:
+        out = []
+        for tipo, val in fila:
+            out.append(val if tipo == 'lit' else eleccion[val])
+        filas.append(tuple(out))
+    return filas
+
+
+def _buscar_periodico_flexible(motor, agrupador, semanas_layout, opciones_por_horario, n_semanas):
+    """Busca un periódico existente tolerando DOS ambigüedades a la vez:
+
+      (a) la rotación del ciclo (via _buscar_periodico_rotando), y
+      (b) los DIARIOS DUPLICADOS: un horario que en el agrupador existe con varios
+          códigos equivalentes (ej. 03:00-11:00 = R008 y R175) puede estar guardado
+          en el periódico con CUALQUIERA de ellos. La grilla elige uno (el primero),
+          pero el periódico real pudo armarse con otro.
+
+    Prueba las combinaciones de códigos por horario —primero la elección primaria,
+    así el caso sin duplicados no cambia— y para cada una prueba las rotaciones.
+    Devuelve (rp, shift, eleccion): rp/shift del primer match; eleccion = qué código
+    quedó por horario. Si ninguna combinación existe, devuelve el resultado primario
+    (existe=False) con la elección primaria, para que arriba se proponga crear.
+    """
+    import itertools
+    horarios = sorted({val for fila in semanas_layout for tipo, val in fila if tipo == 'h'})
+    listas = [opciones_por_horario.get(h) or [None] for h in horarios]
+    # La primera opción de cada horario es la primaria: product() la prueba primero.
+    resultado_primario = None
+    for combo in itertools.product(*listas) if horarios else [()]:
+        eleccion = dict(zip(horarios, combo))
+        semanas_tuples = _tuples_desde_layout(semanas_layout, eleccion)
+        if n_semanas == 1:
+            rp = motor.buscar_periodico(agrupador, semanas_tuples[0])
+            shift = 0
+        else:
+            rp, shift = _buscar_periodico_rotando(motor, agrupador, semanas_tuples)
+        if resultado_primario is None:
+            resultado_primario = (rp, shift, eleccion)
+        if rp.existe:
+            return rp, shift, eleccion
+    return resultado_primario if resultado_primario is not None else (
+        motor.buscar_periodico_multi(agrupador, []), 0, {})
+
+
 def resolver_grilla(
     grilla: Grilla,
     agrupador: int,
@@ -117,9 +168,10 @@ def resolver_grilla(
                 }
                 if rb.duplicado:
                     notas.append(
-                        f'Diario {horario}: múltiples códigos en agrupador {agrupador}: '
+                        f'Diario {horario}: duplicado preexistente en agrupador {agrupador}: '
                         + ', '.join(c[0] for c in rb.codigos)
-                        + '. Se usa el primero; confirmar.'
+                        + f'. Se usa {rb.codigos[0][0]} salvo que un periódico existente '
+                        'indique otro; confirmar.'
                     )
             else:
                 prop = motor.proponer_correlativo('diario', agrupador, familia_diario, reservas)
@@ -146,19 +198,39 @@ def resolver_grilla(
         for horario in sorted(horarios_unicos):
             diarios_por_horario[horario] = {'accion': 'sin_motor', 'codigo': None}
 
+    # Opciones de código por horario, para tolerar diarios duplicados al matchear
+    # el periódico: un horario que ya existe con varios códigos equivalentes puede
+    # estar guardado en el periódico con cualquiera de ellos. La primera es la
+    # primaria (la que muestra la grilla salvo que un periódico existente diga otra).
+    opciones_por_horario: dict = {}
+    for h, info in diarios_por_horario.items():
+        if info.get('accion') == 'existe':
+            opciones_por_horario[h] = [t['codigo'] for t in info.get('todos', [])] or [info.get('codigo')]
+        elif info.get('accion') == 'crear':
+            opciones_por_horario[h] = [info.get('codigo_propuesto')]
+        else:
+            opciones_por_horario[h] = [info.get('codigo')]
+
     # -----------------------------------------------------------------------
     # 3. Armar la grilla de códigos (N semanas × 7)
+    #    semanas_layout guarda, en paralelo, de qué depende cada celda: literal
+    #    (LIBR / REVISAR) o el horario de trabajo. Sirve para re-armar la grilla
+    #    con otra elección de diario cuando un periódico existente lo exige.
     # -----------------------------------------------------------------------
     hay_revisar = False
     semanas_codigos: list = []
+    semanas_layout: list = []
 
     for i_sem, sem in enumerate(grilla.semanas):
         fila = []
+        fila_layout = []
         for d, celda in enumerate(sem):
             if celda.es_franco:
                 fila.append(CODIGO_FRANCO)
+                fila_layout.append(('lit', CODIGO_FRANCO))
             elif celda.a_ordenes or celda.sin_definir:
                 fila.append(CODIGO_REVISAR)
+                fila_layout.append(('lit', CODIGO_REVISAR))
                 hay_revisar = True
                 tipo_aviso = 'sin definir' if celda.sin_definir else '"a órdenes"'
                 notas.append(f'Sem{i_sem + 1}/{DIAS_ORDEN[d]}: {tipo_aviso} → REVISAR MANUAL')
@@ -167,15 +239,20 @@ def resolver_grilla(
                 accion = info.get('accion')
                 if accion == 'existe':
                     fila.append(info['codigo'])
+                    fila_layout.append(('h', celda.horario))
                 elif accion == 'crear':
                     fila.append(info.get('codigo_propuesto') or CODIGO_REVISAR)
+                    fila_layout.append(('h', celda.horario))
                 else:
                     fila.append(CODIGO_REVISAR)
+                    fila_layout.append(('lit', CODIGO_REVISAR))
                     hay_revisar = True
             else:
                 fila.append(CODIGO_REVISAR)
+                fila_layout.append(('lit', CODIGO_REVISAR))
                 hay_revisar = True
         semanas_codigos.append(fila)
+        semanas_layout.append(fila_layout)
 
     # -----------------------------------------------------------------------
     # 4. Buscar / proponer el periódico
@@ -188,14 +265,28 @@ def resolver_grilla(
             'nota': 'No se puede determinar el periódico hasta resolver las celdas REVISAR_MANUAL.',
         }
     else:
-        semanas_tuples = [tuple(fila) for fila in semanas_codigos]
-        if grilla.n_semanas == 1:
-            rp = motor.buscar_periodico(agrupador, semanas_tuples[0])
-            shift = 0
-        else:
-            rp, shift = _buscar_periodico_rotando(motor, agrupador, semanas_tuples)
+        rp, shift, eleccion = _buscar_periodico_flexible(
+            motor, agrupador, semanas_layout, opciones_por_horario, grilla.n_semanas)
 
+        # Si el periódico existe gracias a un diario duplicado resuelto por un código
+        # distinto al primario, la grilla y el diario elegido se alinean a ese código
+        # (es el que usa el periódico real) y se deja una nota. Sin duplicados no pasa.
         if rp.existe:
+            for h, cod in eleccion.items():
+                info = diarios_por_horario.get(h, {})
+                if info.get('accion') == 'existe' and cod and info.get('codigo') != cod:
+                    anterior = info.get('codigo')
+                    info['codigo'] = cod
+                    semanas_codigos = [
+                        [cod if celda == anterior else celda for celda in fila]
+                        for fila in semanas_codigos
+                    ]
+                    notas.append(
+                        f'Diario {h}: hay duplicados ({", ".join(o for o in opciones_por_horario[h])}); '
+                        f'se usa {cod} porque es el que figura en el periódico existente '
+                        f'{rp.codigos[0][0]} (no {anterior}).'
+                    )
+
             resultado_periodico = {
                 'accion': 'existe',
                 'codigo': rp.codigos[0][0],
