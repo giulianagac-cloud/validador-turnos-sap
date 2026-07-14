@@ -493,10 +493,10 @@ class MotorTurnos:
         propuesto = f'{familia_prefijo}{ultimo + 1:0{ancho}d}'
         huecos = [f'{familia_prefijo}{n:0{ancho}d}'
                   for n in range(nums_merged[0], ultimo + 1) if n not in set(nums_merged)]
+        # Los codigos con numero fuera de rango (defaults de SAP, siempre presentes)
+        # se ignoran en silencio: se guardan en `sospechosos` por si hacen falta,
+        # pero NO se listan en la nota (seria ruido, son decenas y no son un error).
         raros = sospechosos.get(familia_prefijo, [])
-        nota_raros = (f' OJO: se ignoraron codigos con numero fuera de rango en la familia '
-                      f'"{familia_prefijo}" (posible dato mal cargado): {raros}. Revisar en la tabla.'
-                      if raros else '')
         return {
             'sospechosos': raros,
             'propuesto': propuesto,
@@ -506,8 +506,7 @@ class MotorTurnos:
             'nota': (f'Propongo {propuesto} (siguiente de {familia_prefijo}{ultimo:0{ancho}d}). '
                      + (f'Hay {len(huecos)} huecos libres NO usados: {huecos[:10]}'
                         + ('...' if len(huecos) > 10 else '')
-                        if huecos else 'Familia sin huecos.')
-                     + nota_raros),
+                        if huecos else 'Familia sin huecos.')),
         }
 
 
@@ -528,10 +527,9 @@ class MotorTurnos:
             return {'estado': 'revisar',
                     'nota': f'La familia "{pref}" no existe en el agrupador {agrupador}. '
                             f'Familias presentes: {sorted(familias.keys())}'}
+        # Defaults de SAP (numero fuera de rango): se ignoran en silencio, sin
+        # ensuciar la nota. Quedan en `sospechosos` por si hicieran falta.
         raros = sospechosos.get(pref, [])
-        nota_raros = (f' OJO: se ignoraron codigos con numero fuera de rango en la familia '
-                      f'"{pref}" (posible dato mal cargado): {raros}. Revisar en la tabla.'
-                      if raros else '')
         nums_reservados = (reservas or {}).get(('turno', agrupador, pref), set())
         nums_merged = sorted(set(nums_tabla) | nums_reservados)
         ultimo = nums_merged[-1]
@@ -551,7 +549,7 @@ class MotorTurnos:
             estado = 'retroactivo'
             nota = (f'El codigo {codigo_pedido} es menor al ultimo existente {pref}{ultimo:0{ancho}d} '
                     f'pero no existe (hueco). Revisar.')
-        return {'estado': estado, 'nota': nota + nota_raros,
+        return {'estado': estado, 'nota': nota,
                 'esperado': f'{pref}{esperado:0{ancho}d}',
                 'ultimo_existente': f'{pref}{ultimo:0{ancho}d}', 'familia': pref,
                 'sospechosos': raros}
