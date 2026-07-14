@@ -99,9 +99,14 @@ const stepStyle: React.CSSProperties = {
 export default function GrillaResultado({
   resultado,
   pedidos,
+  esPrimerAviso = false,
 }: {
   resultado: ResultadoGrilla | ResultadoRotativo;
   pedidos?: Record<string, PedidoDisplay>;
+  // true solo para el PRIMER turno del lote con colisión de correlativo: ese
+  // muestra REVISAR + la aclaración (para ir a mirar la solapa Filtros). Los
+  // demás muestran directo el turno a crear, sin repetir el cartel.
+  esPrimerAviso?: boolean;
 }) {
   const rotativo = esRot(resultado);
   const agr = resultado.agrupador;
@@ -109,25 +114,31 @@ export default function GrillaResultado({
   const franco = rotativo ? resultado.franco : null;
 
   const tituloTurno = rotativo ? resultado.codigo_base : resultado.codigo_turno;
-  const turnoBadge = badgeTurno(resultado.turno?.estado, resultado.ya_existe);
   // Aviso de correlativo del turno: el código pedido colisiona (número ya
   // tomado) o no encaja como siguiente, y NO es un turno ya creado real.
   const turnoAviso = !resultado.ya_existe && resultado.turno
     && ['duplicado', 'salto', 'retroactivo', 'revisar'].includes(resultado.turno.estado)
     ? resultado.turno : null;
-  // 'duplicado' = el número pedido ya está ocupado por sus variantes (-A/-B).
-  // No es ambiguo: hay que usar el siguiente correlativo libre. Se muestra como
-  // propuesta directa ("Usá LBSxxx"), no como "revisá y decidí".
-  const turnoDuplicado = !!turnoAviso && turnoAviso.estado === 'duplicado' && !!turnoAviso.esperado;
+  // Primer turno con colisión -> REVISAR + aclaración. Los demás -> crear directo.
+  const mostrarRevisar = !!turnoAviso && esPrimerAviso;
+  const mostrarCrearDirecto = !!turnoAviso && !esPrimerAviso;
+
+  let turnoBadge = badgeTurno(resultado.turno?.estado, resultado.ya_existe);
+  if (mostrarRevisar) turnoBadge = BADGE.revisar;
+  else if (mostrarCrearDirecto) turnoBadge = BADGE.crear;
   const periodicoBadge = badgeAccion(resultado.periodico.accion);
   const periodicoCodigo = resultado.periodico.accion === 'crear'
     ? resultado.periodico.codigo_propuesto
     : resultado.periodico.codigo;
 
+  // Código de turno a mostrar en el cuadro: si hay colisión de correlativo, el
+  // que se va a CREAR (esperado), no el pedido que ya está ocupado.
+  const codigoTurnoMostrar = turnoAviso?.esperado ?? resultado.codigo_turno;
+
   // Variantes uniformes (rotativo A/B; o una sola para grilla simple)
   const variantes: { codigo: string; variante: string; ref: FechaReferencia }[] = rotativo
     ? resultado.variantes.map(v => ({ codigo: v.codigo, variante: v.variante, ref: v.fecha_referencia }))
-    : [{ codigo: resultado.codigo_turno, variante: '', ref: resultado.fecha_referencia }];
+    : [{ codigo: codigoTurnoMostrar, variante: '', ref: resultado.fecha_referencia }];
 
   // Diarios usados EN ESTE turno (el dict puede venir compartido en un lote):
   // filtrar por los códigos que aparecen en la grilla.
@@ -197,7 +208,7 @@ export default function GrillaResultado({
         style={{ background: resultado.parseError ? '#CC0000'
           : resultado.flex ? '#9E5000'
           : resultado.hay_revisar ? '#9E5000'
-          : turnoDuplicado ? '#0A246A'
+          : mostrarCrearDirecto ? '#0A246A'
           : turnoAviso ? '#9E5000'
           : resultado.ok ? '#1A5C1A' : '#0A246A' }}>
         {resultado.parseError
@@ -208,10 +219,10 @@ export default function GrillaResultado({
           ? `${tituloTurno} — FLEX: elegí el diario`
           : resultado.hay_revisar
           ? `⚠ ${tituloTurno} — hay celdas REVISAR MANUAL`
-          : turnoDuplicado
+          : mostrarCrearDirecto
           ? `Turno a crear: ${turnoAviso?.esperado}`
           : turnoAviso
-          ? `⚠ ${tituloTurno} — revisá el correlativo del turno`
+          ? `⚠ ${turnoAviso.esperado ?? tituloTurno} — revisá el correlativo`
           : `Resultado — ${tituloTurno}${rotativo ? ' (ROTATIVO)' : ''}`}
       </div>
 
@@ -271,15 +282,19 @@ export default function GrillaResultado({
                 </tbody>
               </table>
             </div>
-            {turnoAviso && !turnoDuplicado && (
+            {mostrarRevisar && turnoAviso && (
               <div style={{
                 marginTop: 8, padding: '7px 9px', fontSize: 12,
                 background: '#FFF3CD', border: '1px solid #E0B000', color: '#7A4E00',
               }}>
-                <b>⚠ Revisar el código de turno.</b> {turnoAviso.nota}
+                <b>⚠ Revisar el correlativo.</b> {turnoAviso.nota}
                 {turnoAviso.esperado && (
                   <> El siguiente correlativo libre sería <b style={mono}>{turnoAviso.esperado}</b>.</>
                 )}
+                <div style={{ marginTop: 3, color: '#8A6000' }}>
+                  Mirá la solapa <b>Filtros</b> (Turnos) para ver la numeración de la familia.
+                  Los turnos que siguen ya toman el correlativo corrido.
+                </div>
               </div>
             )}
             {rotativo && (

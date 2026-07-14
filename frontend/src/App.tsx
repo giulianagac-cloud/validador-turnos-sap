@@ -231,11 +231,22 @@ export default function App() {
               </button>
             </div>
           )}
-          {resultados.map((r, i) => (
-            esRotativo(r) || esExistente(r)
-              ? <GrillaResultado key={i} resultado={r} pedidos={pedidosPorCodigo} />
-              : <GrillaResultado key={i} resultado={simpleToGrilla(r)} pedidos={pedidosPorCodigo} />
-          ))}
+          {(() => {
+            // La aclaración del correlativo (REVISAR + nota "mirá Filtros") va SOLO
+            // en el PRIMER turno con colisión de correlativo. Los demás muestran
+            // directo el turno a crear, sin repetir el cartel.
+            const esColision = (r: unknown): boolean => {
+              const x = r as { ya_existe?: boolean; turno?: { estado?: string } };
+              return !x.ya_existe && !!x.turno
+                && ['duplicado', 'salto', 'retroactivo', 'revisar'].includes(x.turno.estado ?? '');
+            };
+            const primerColisionIdx = resultados.findIndex(esColision);
+            return resultados.map((r, i) => (
+              esRotativo(r) || esExistente(r)
+                ? <GrillaResultado key={i} resultado={r} pedidos={pedidosPorCodigo} esPrimerAviso={i === primerColisionIdx} />
+                : <GrillaResultado key={i} resultado={simpleToGrilla(r)} pedidos={pedidosPorCodigo} esPrimerAviso={i === primerColisionIdx} />
+            ));
+          })()}
         </div>
 
         <div style={{ display: tab === 'filtros' ? 'block' : 'none' }}>
