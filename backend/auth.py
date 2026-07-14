@@ -13,7 +13,10 @@ from typing import Optional
 
 from fastapi import Cookie, HTTPException, Response
 
-AUTH_ENABLED = bool(os.environ.get("VERCEL"))
+# Login del equipo DESACTIVADO temporalmente a pedido de la usuaria.
+# Para REACTIVARLO: volver a la línea original ->
+#     AUTH_ENABLED = bool(os.environ.get("VERCEL"))
+AUTH_ENABLED = False
 
 COOKIE_NAME = "session"
 _DURACION_SEG = 7 * 24 * 3600  # 7 días
