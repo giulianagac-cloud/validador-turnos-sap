@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import TablasLoader from './components/TablasLoader';
 import PedidoForm from './components/PedidoForm';
+import FiltrosTablas from './components/FiltrosTablas';
 import GrillaResultado from './components/GrillaResultado';
 import LoginScreen from './components/LoginScreen';
 import type { TablasState, AnyResultado, PedidoDisplay } from './types';
@@ -12,7 +13,7 @@ import { formatLoadTime, formatElapsed } from './utils';
 // Horas tras las cuales se muestra la advertencia de tablas desactualizadas
 const STALE_HOURS = 8;
 
-type Tab = 'tablas' | 'pedido' | 'resultados';
+type Tab = 'tablas' | 'pedido' | 'resultados' | 'filtros';
 type AuthState = 'checking' | 'needed' | 'ok';
 
 export default function App() {
@@ -101,6 +102,7 @@ export default function App() {
   const gotoTab = (t: Tab) => {
     if (t === 'pedido' && !tablas) return;
     if (t === 'resultados' && resultados.length === 0) return;
+    if (t === 'filtros' && !tablas) return;
     setTab(t);
   };
 
@@ -174,6 +176,13 @@ export default function App() {
         >
           3. Resultados {resultados.length > 0 && `(${resultados.length})`}
         </div>
+        <div
+          className={`sap-tab${tab === 'filtros' ? ' active' : ''}${!tablas ? ' disabled' : ''}`}
+          onClick={() => gotoTab('filtros')}
+          title={!tablas ? 'Primero cargá las tablas SAP' : undefined}
+        >
+          4. Filtros
+        </div>
       </div>
 
       {/* Content — todos los tabs renderizados, mostrados/ocultos via display */}
@@ -227,6 +236,13 @@ export default function App() {
               ? <GrillaResultado key={i} resultado={r} pedidos={pedidosPorCodigo} />
               : <GrillaResultado key={i} resultado={simpleToGrilla(r)} pedidos={pedidosPorCodigo} />
           ))}
+        </div>
+
+        <div style={{ display: tab === 'filtros' ? 'block' : 'none' }}>
+          <FiltrosTablas
+            tablasState={tablas}
+            onError={(msg) => setStatus(`Error: ${msg}`, 'error')}
+          />
         </div>
       </div>
 

@@ -92,6 +92,22 @@ export async function estadoTablas(): Promise<EstadoTablas> {
   return res.json();
 }
 
+export interface TablaData {
+  cual: string;
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  n: number;
+}
+
+export async function getTabla(cual: 'diarios' | 'periodicos' | 'turnos'): Promise<TablaData> {
+  const res = await fetch(`${BASE}/tabla/${cual}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Error al cargar la tabla');
+  }
+  return res.json();
+}
+
 export async function cargarPedido(archivo: File, solapa?: string): Promise<CargarPedidoResponse> {
   const fd = new FormData();
   fd.append('archivo', archivo);

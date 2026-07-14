@@ -1,4 +1,5 @@
 import io
+import json
 import math
 import re
 import unicodedata
@@ -100,6 +101,34 @@ def estado_tablas():
         "n_diarios": len(_motor.diarios),
         "n_periodicos": len(_motor.periodicos),
         "n_turnos": len(_motor.turnos),
+    }
+
+
+@router.get("/tabla/{cual}")
+def tabla(cual: str):
+    """Devuelve una de las 3 tablas cargadas (diarios/periodicos/turnos) como
+    columns + rows, para explorarla y filtrarla en la solapa Filtros. Refleja
+    siempre las tablas cargadas ahora en memoria (se actualiza al recargarlas)."""
+    if _motor is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Primero cargá los 3 Excels de SAP en la pantalla de Carga de Tablas.",
+        )
+    fuentes = {
+        "diarios": _motor.diarios,
+        "periodicos": _motor.periodicos,
+        "turnos": _motor.turnos,
+    }
+    df = fuentes.get(cual)
+    if df is None:
+        raise HTTPException(status_code=404, detail=f"Tabla '{cual}' no existe.")
+    # to_json maneja NaN -> null y fechas -> ISO; orient='split' da columns + data.
+    payload = json.loads(df.to_json(orient="split", date_format="iso", default_handler=str))
+    return {
+        "cual": cual,
+        "columns": payload["columns"],
+        "rows": payload["data"],
+        "n": len(payload["data"]),
     }
 
 
