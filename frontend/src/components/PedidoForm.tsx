@@ -22,6 +22,24 @@ function esFlexPorPrefijo(codigo: string | null): boolean {
   return m ? FLEX_PREFIXES.has(m[1].toUpperCase()) : false;
 }
 
+// Feriado desde la columna "feriado" del Excel (viene como SI/NO/FSI/FNO/etc.).
+function feriadoDeColumna(raw: string | null | undefined): 'SI' | 'NO' | '' {
+  if (!raw) return '';
+  const t = String(raw).toLowerCase().trim();
+  if (t.includes('fsi') || t.includes('feriado si') || t.startsWith('si') || t.startsWith('sí')) return 'SI';
+  if (t.includes('fno') || t.includes('feriado no') || t.startsWith('no')) return 'NO';
+  return '';
+}
+
+// Feriado embebido en el detalle horario (FSI/FNO), misma lógica que el motor.
+function feriadoDeDetalle(detalle: string | null | undefined): 'SI' | 'NO' | '' {
+  if (!detalle) return '';
+  const t = String(detalle).toLowerCase();
+  if (t.includes('fsi') || t.includes('feriado si')) return 'SI';
+  if (t.includes('fno') || t.includes('feriado no')) return 'NO';
+  return '';
+}
+
 interface FormRow {
   id: string;
   codigo: string;
@@ -32,7 +50,7 @@ interface FormRow {
   horas_diarias_decl: string;
   horas_sem_decl: string;
   horas_men_decl: number | null; // solo se completa desde import Excel
-  feriados: string;  // eco del Excel (SI/NO); solo se muestra en el resultado
+  feriados: string;  // 'SI' | 'NO' | '' — Feriado SÍ (FSI) / Feriado NO (FNO)
   es_flex: boolean;
 }
 
@@ -61,7 +79,7 @@ function fromImportado(p: PedidoCargado): FormRow {
     horas_diarias_decl: p.horas_diarias_decl != null ? String(p.horas_diarias_decl) : '',
     horas_sem_decl: p.horas_sem_decl != null ? String(p.horas_sem_decl) : '',
     horas_men_decl: p.horas_men_decl ?? null,
-    feriados: p.feriados ?? '',
+    feriados: feriadoDeColumna(p.feriados) || feriadoDeDetalle(p.detalle_horario),
     es_flex: esFlexPorPrefijo(p.codigo),
   };
 }
@@ -178,7 +196,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
     franco: r.franco.trim(),
     horas_diarias_decl: r.horas_diarias_decl,
     horas_sem_decl: r.horas_sem_decl,
-    feriados: r.feriados,
+    feriados: r.feriados === 'SI' ? 'FERIADO SÍ' : r.feriados === 'NO' ? 'FERIADO NO' : '',
   }));
 
   const executeAnalisis = async (pedidos: PedidoIn[]) => {
@@ -365,7 +383,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
           )}
 
           <div style={{ overflowX: 'auto' }}>
-            <table className="alv-table" style={{ minWidth: 1010 }}>
+            <table className="alv-table" style={{ minWidth: 1110 }}>
               <thead>
                 <tr>
                   <th style={{ width: 28, textAlign: 'center' }}>#</th>
@@ -378,6 +396,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
                   <th style={{ width: 155 }}>Agrupador <span style={{ color: '#CC0000' }}>*</span></th>
                   <th style={{ width: 75 }}>H. Diarias</th>
                   <th style={{ width: 75 }}>H. Semanales</th>
+                  <th style={{ width: 100 }}>Feriado</th>
                   <th style={{ width: 42, textAlign: 'center' }}>FLEX</th>
                   <th style={{ width: 26 }}></th>
                 </tr>
@@ -474,6 +493,19 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
                           onChange={e => update(row.id, 'horas_sem_decl', e.target.value)}
                           placeholder="30.00"
                         />
+                      </td>
+                      <td>
+                        <select
+                          className="sap-select"
+                          style={{ width: '100%' }}
+                          value={row.feriados}
+                          onChange={e => update(row.id, 'feriados', e.target.value)}
+                          title="Feriado SÍ (FSI) / Feriado NO (FNO)"
+                        >
+                          <option value="">—</option>
+                          <option value="SI">Feriado SÍ</option>
+                          <option value="NO">Feriado NO</option>
+                        </select>
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <input
