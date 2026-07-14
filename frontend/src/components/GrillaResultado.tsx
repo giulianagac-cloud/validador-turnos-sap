@@ -47,9 +47,15 @@ const BADGE = {
   neutro:  { label: '—',         color: '#555',    bg: 'transparent' },
 } as const;
 
-/** Estado del TURNO (regla LR): ok=correlativo correcto a crear, duplicado=ya existe. */
-function badgeTurno(estado?: string): EstadoVisual {
-  if (estado === 'duplicado') return BADGE.creado;
+/**
+ * Estado del TURNO (regla LR/LBS…). `yaExiste` distingue los dos sentidos de
+ * 'duplicado':
+ *  - lookup inverso (el código EXACTO ya está en Turnos.XLSX) → YA CREADO (verde).
+ *  - analizador simple (el número ya está tomado, p.ej. por variantes -A/-B, pero
+ *    el código exacto no existe) → es una COLISIÓN a revisar, NO un "ya creado".
+ */
+function badgeTurno(estado?: string, yaExiste?: boolean): EstadoVisual {
+  if (estado === 'duplicado') return yaExiste ? BADGE.creado : BADGE.revisar;
   if (estado === 'ok') return BADGE.crear;
   if (estado === 'salto' || estado === 'retroactivo' || estado === 'revisar') return BADGE.revisar;
   return BADGE.neutro;
@@ -103,7 +109,12 @@ export default function GrillaResultado({
   const franco = rotativo ? resultado.franco : null;
 
   const tituloTurno = rotativo ? resultado.codigo_base : resultado.codigo_turno;
-  const turnoBadge = badgeTurno(resultado.turno?.estado);
+  const turnoBadge = badgeTurno(resultado.turno?.estado, resultado.ya_existe);
+  // Aviso de correlativo del turno: el código pedido colisiona (número ya
+  // tomado) o no encaja como siguiente, y NO es un turno ya creado real.
+  const turnoAviso = !resultado.ya_existe && resultado.turno
+    && ['duplicado', 'salto', 'retroactivo', 'revisar'].includes(resultado.turno.estado)
+    ? resultado.turno : null;
   const periodicoBadge = badgeAccion(resultado.periodico.accion);
   const periodicoCodigo = resultado.periodico.accion === 'crear'
     ? resultado.periodico.codigo_propuesto
@@ -182,6 +193,7 @@ export default function GrillaResultado({
         style={{ background: resultado.parseError ? '#CC0000'
           : resultado.flex ? '#9E5000'
           : resultado.hay_revisar ? '#9E5000'
+          : turnoAviso ? '#9E5000'
           : resultado.ok ? '#1A5C1A' : '#0A246A' }}>
         {resultado.parseError
           ? `⚠ ${tituloTurno} — no se pudo interpretar el horario`
@@ -191,6 +203,8 @@ export default function GrillaResultado({
           ? `${tituloTurno} — FLEX: elegí el diario`
           : resultado.hay_revisar
           ? `⚠ ${tituloTurno} — hay celdas REVISAR MANUAL`
+          : turnoAviso
+          ? `⚠ ${tituloTurno} — revisá el correlativo del turno`
           : `Resultado — ${tituloTurno}${rotativo ? ' (ROTATIVO)' : ''}`}
       </div>
 
@@ -250,6 +264,21 @@ export default function GrillaResultado({
                 </tbody>
               </table>
             </div>
+            {turnoAviso && (
+              <div style={{
+                marginTop: 8, padding: '7px 9px', fontSize: 12,
+                background: '#FFF3CD', border: '1px solid #E0B000', color: '#7A4E00',
+              }}>
+                <b>⚠ Revisar el código de turno.</b> {turnoAviso.nota}
+                {turnoAviso.esperado && (
+                  <> El siguiente correlativo libre sería <b style={mono}>{turnoAviso.esperado}</b>.</>
+                )}
+                <div style={{ marginTop: 3, color: '#8A6000' }}>
+                  Puede ser que el número ya esté usado por variantes (p. ej. <span style={mono}>-A</span>/<span style={mono}>-B</span>).
+                  No es un turno "ya creado": decidí si reutilizás el existente o creás el correlativo propuesto.
+                </div>
+              </div>
+            )}
             {rotativo && (
               <p style={{ fontSize: 11, color: '#444', margin: '7px 0 0' }}>
                 Rotación de {resultado.n_semanas} semanas: las variantes son el <b>mismo turno y periódico</b>;
