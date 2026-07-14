@@ -14,6 +14,19 @@ const SUBTABS: { cual: Cual; label: string }[] = [
 // evita congelar el navegador con tablas muy grandes).
 const MAX_FILAS = 1500;
 
+// Texto visible de una celda. Las fechas ISO se muestran en formato SAP
+// (dd.mm.yyyy). Se usa el MISMO texto para mostrar, filtrar y ordenar, así el
+// filtro coincide con lo que se ve (como en Excel).
+function textoCelda(v: string | number | boolean | null): string {
+  if (v === null || v === '') return '';
+  if (typeof v === 'string') {
+    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}/);
+    if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+    return v;
+  }
+  return String(v);
+}
+
 interface Props {
   tablasState: TablasState | null;
   onError: (msg: string) => void;
@@ -51,22 +64,21 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
     let out = data.rows;
     if (activos.length) {
       out = out.filter(row =>
-        activos.every(([ci, val]) => {
-          const cell = row[Number(ci)];
-          return String(cell ?? '').toLowerCase().includes(val.trim().toLowerCase());
-        }),
+        activos.every(([ci, val]) =>
+          textoCelda(row[Number(ci)]).toLowerCase().includes(val.trim().toLowerCase()),
+        ),
       );
     }
     if (sort) {
       const { col, dir } = sort;
       out = [...out].sort((a, b) => {
-        const av = a[col], bv = b[col];
-        const an = typeof av === 'number' ? av : parseFloat(String(av));
-        const bn = typeof bv === 'number' ? bv : parseFloat(String(bv));
-        if (!Number.isNaN(an) && !Number.isNaN(bn) && String(av).trim() !== '' && String(bv).trim() !== '') {
+        const at = textoCelda(a[col]), bt = textoCelda(b[col]);
+        const an = typeof a[col] === 'number' ? (a[col] as number) : parseFloat(at);
+        const bn = typeof b[col] === 'number' ? (b[col] as number) : parseFloat(bt);
+        if (!Number.isNaN(an) && !Number.isNaN(bn) && at !== '' && bt !== '') {
           return (an - bn) * dir;
         }
-        return String(av ?? '').localeCompare(String(bv ?? ''), 'es') * dir;
+        return at.localeCompare(bt, 'es') * dir;
       });
     }
     return out;
@@ -190,7 +202,7 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
                             borderBottom: '1px solid #E0DED8',
                           }}
                         >
-                          {cell === null || cell === '' ? '' : String(cell)}
+                          {textoCelda(cell)}
                         </td>
                       ))}
                     </tr>
