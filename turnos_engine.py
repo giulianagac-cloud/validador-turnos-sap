@@ -350,7 +350,10 @@ class MotorTurnos:
         self._idx_periodico = {}
         self._idx_periodico_multi = {}
 
-        # Agrupar todas las filas por código de periódico
+        # Agrupar todas las filas por (código, agrupador). El código de periódico
+        # NO es unico entre lineas (ej. T153 existe en Sarmiento como turno simple
+        # y en Mitre como "Rotacion TDLC"): agrupar solo por codigo mezclaria las
+        # semanas de dos periodicos homonimos. La clave SIEMPRE lleva el agrupador.
         from collections import defaultdict
         sems_por_cod: dict = defaultdict(dict)
         for _, r in self.periodicos.iterrows():
@@ -361,13 +364,14 @@ class MotorTurnos:
                 num_sem = int(r['Número de semana'])
             except (ValueError, TypeError):
                 continue
-            if num_sem in sems_por_cod[cod]:
-                continue  # duplicado de semana en el export: ignorar filas extra
             agr = r['Agrup.para PHTD']
+            clave = (cod, agr)
+            if num_sem in sems_por_cod[clave]:
+                continue  # duplicado de semana en el export: ignorar filas extra
             grilla = tuple(str(r[c]).strip() for c in daycols)
-            sems_por_cod[cod][num_sem] = (agr, grilla)
+            sems_por_cod[clave][num_sem] = (agr, grilla)
 
-        for cod, sems in sems_por_cod.items():
+        for (cod, agr_clave), sems in sems_por_cod.items():
             if not sems:
                 continue
             n_max = max(sems.keys())
@@ -522,15 +526,20 @@ class MotorTurnos:
     # Es lo correcto cuando el turno ya esta hecho: evita re-derivar del texto
     # (que ante periodicos/diarios duplicados podria dar otro codigo).
     # -----------------------------------------------------------------------
-    def _grilla_de_periodico(self, codigo_periodico: str) -> list:
+    def _grilla_de_periodico(self, codigo_periodico: str, agrupador=None) -> list:
         """Devuelve la grilla real de un periodico: lista de semanas (7 codigos c/u),
-        ordenadas por numero de semana. [] si el periodico no existe o esta incompleto."""
+        ordenadas por numero de semana. [] si el periodico no existe o esta incompleto.
+        El codigo de periodico NO es unico entre lineas (ej. T153 existe en Sarmiento
+        y en Mitre como cosas distintas): SIEMPRE filtrar por agrupador para no mezclar
+        semanas de dos periodicos homonimos de agrupadores distintos."""
         if not hasattr(self, '_daycols'):
             self._indexar_periodicos()
         cod = str(codigo_periodico).strip()
         sems = {}
         for _, r in self.periodicos.iterrows():
             if str(r['PHT por períodos']).strip() != cod:
+                continue
+            if agrupador is not None and r['Agrup.para PHTD'] != agrupador:
                 continue
             try:
                 n = int(r['Número de semana'])
@@ -577,7 +586,7 @@ class MotorTurnos:
         except (ValueError, TypeError):
             agr = agrupador
         periodico = str(row.get('PHT por períodos', '')).strip()
-        semanas = self._grilla_de_periodico(periodico) if periodico and periodico.lower() != 'nan' else []
+        semanas = self._grilla_de_periodico(periodico, agr) if periodico and periodico.lower() != 'nan' else []
 
         # Diarios distintos usados en la grilla -> info real de cada uno
         codigos_grilla = {c for sem in semanas for c in sem if c not in ('LIBR', '', 'nan')}
