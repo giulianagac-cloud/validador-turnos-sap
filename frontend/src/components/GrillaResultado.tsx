@@ -135,10 +135,13 @@ export default function GrillaResultado({
   // que se va a CREAR (esperado), no el pedido que ya está ocupado.
   const codigoTurnoMostrar = turnoAviso?.esperado ?? resultado.codigo_turno;
 
-  // Variantes uniformes (rotativo A/B; o una sola para grilla simple)
-  const variantes: { codigo: string; variante: string; ref: FechaReferencia }[] = rotativo
-    ? resultado.variantes.map(v => ({ codigo: v.codigo, variante: v.variante, ref: v.fecha_referencia }))
-    : [{ codigo: codigoTurnoMostrar, variante: '', ref: resultado.fecha_referencia }];
+  // Variantes uniformes (rotativo A/B; o una sola para grilla simple).
+  // `codigo` = lo que se MUESTRA (el correlativo a crear si hubo colisión);
+  // `codigoPedido` = clave para buscar los datos del pedido (descripción,
+  // detalle, franco, horas, feriado), que están indexados por el código pedido.
+  const variantes: { codigo: string; codigoPedido: string; variante: string; ref: FechaReferencia }[] = rotativo
+    ? resultado.variantes.map(v => ({ codigo: v.codigo, codigoPedido: v.codigo, variante: v.variante, ref: v.fecha_referencia }))
+    : [{ codigo: codigoTurnoMostrar, codigoPedido: resultado.codigo_turno, variante: '', ref: resultado.fecha_referencia }];
 
   // Diarios usados EN ESTE turno (el dict puede venir compartido en un lote):
   // filtrar por los códigos que aparecen en la grilla.
@@ -253,7 +256,7 @@ export default function GrillaResultado({
                 </thead>
                 <tbody>
                   {variantes.map(v => {
-                    const p = pedidos?.[v.codigo];
+                    const p = pedidos?.[v.codigoPedido];
                     return (
                       <tr key={v.codigo}>
                         <td style={{ ...mono, fontWeight: 'bold' }}>{v.codigo}</td>
