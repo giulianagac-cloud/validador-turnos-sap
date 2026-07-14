@@ -392,7 +392,13 @@ export default function GrillaResultado({
                 <Badge v={periodicoBadge} extra={resultado.periodico.accion === 'crear' ? 'proponer' : undefined} />
               </span>
             </div>
-            {resultado.periodico.accion === 'crear' && (
+            {resultado.periodico.compartido && (
+              <div style={{ fontSize: 11, color: '#0A5C0A', background: '#E9F5E9',
+                border: '1px solid #7FB07F', padding: '4px 8px', margin: '0 0 7px' }}>
+                ✓ Compartido: mismo periódico <b style={mono}>{periodicoCodigo}</b> que otro turno del lote (mismo horario). Crealo <b>una sola vez</b>.
+              </div>
+            )}
+            {resultado.periodico.accion === 'crear' && !resultado.periodico.compartido && rotativo && (
               <p style={{ fontSize: 11, color: '#444', margin: '0 0 7px' }}>
                 Un solo periódico <b style={mono}>{periodicoCodigo}</b> para toda la rotación.
               </p>
@@ -454,9 +460,10 @@ export default function GrillaResultado({
                     <span style={{ ...mono, color: '#444' }}>{horarioTexto(horario)}</span>
                     {horas != null && <span style={{ color: '#444' }}>· {horas} h</span>}
                     {d.duplicado && <span style={{ color: '#CC6600', fontSize: 11 }}>(duplicado — respetar todos)</span>}
+                    {d.compartido && <span style={{ color: '#0A5C0A', fontSize: 11 }}>✓ compartido — crear una sola vez</span>}
                     <span style={{ marginLeft: 'auto' }}>
                       {esCrear
-                        ? <Badge v={BADGE.crear} extra={`propone ${d.codigo_propuesto}`} />
+                        ? <Badge v={BADGE.crear} extra={d.compartido ? 'compartido' : `propone ${d.codigo_propuesto}`} />
                         : <Badge v={BADGE.creado} />}
                     </span>
                   </div>

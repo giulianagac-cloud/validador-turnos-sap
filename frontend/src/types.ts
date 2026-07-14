@@ -76,6 +76,7 @@ export interface ResultadoDiario {
   familia?: string;
   detalle?: CorrelativoDetalle;
   candidatos?: DiarioDetalle[];   // FLEX: diarios candidatos para que el usuario elija
+  compartido?: boolean;           // se crea una sola vez, compartido con otro turno del lote
 }
 
 export interface ResultadoPeriodico {
@@ -89,6 +90,7 @@ export interface ResultadoPeriodico {
   detalle?: CorrelativoDetalle;
   fecha_referencia?: string;
   punto_arranque?: number;
+  compartido?: boolean;           // se crea una sola vez, compartido con otro turno del lote
 }
 
 export interface Cuadrito {
@@ -127,6 +129,7 @@ export interface DiarioResuelto {
   notas?: string[];
   detalle?: CorrelativoDetalle;
   tolerancia?: Tolerancia;
+  compartido?: boolean;           // se crea una sola vez, compartido con otro turno del lote
 }
 
 export interface AccionDiarioGrilla {
@@ -162,6 +165,7 @@ export interface ResultadoGrilla {
     detalle?: CorrelativoDetalle;
     nota?: string;
     notas?: string[];
+    compartido?: boolean;         // se crea una sola vez, compartido con otro turno del lote
   };
   turno: ResultadoTurno;
   fecha_referencia: FechaReferencia;

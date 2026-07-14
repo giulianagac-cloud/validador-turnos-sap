@@ -23,6 +23,7 @@ export function simpleToGrilla(r: ResultadoAnalisis): ResultadoGrilla {
       duplicado: r.diario.duplicado,
       notas: r.diario.notas,
       detalle: r.diario.detalle,
+      compartido: r.diario.compartido,
       // La tolerancia solo viene cuando el diario se crea; si no, se omite.
       tolerancia: r.tolerancia && r.tolerancia.inicio_teorico ? r.tolerancia : undefined,
     };
@@ -43,6 +44,7 @@ export function simpleToGrilla(r: ResultadoAnalisis): ResultadoGrilla {
       familia: r.periodico.familia,
       detalle: r.periodico.detalle,
       nota: r.periodico.nota,
+      compartido: r.periodico.compartido,
     },
     turno: r.turno,
     fecha_referencia: {

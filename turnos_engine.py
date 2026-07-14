@@ -757,7 +757,8 @@ class MotorTurnos:
         return out
 
     def _analizar_impl(self, codigo_pedido, descripcion, detalle_horario,
-                       agrupador, horas_diarias_decl, horas_sem_decl, horas_men_decl, es_flex, reservas):
+                       agrupador, horas_diarias_decl, horas_sem_decl, horas_men_decl, es_flex,
+                       reservas, cache=None):
         # Turno YA CREADO: si el codigo ya existe en la tabla, se lee su cadena real
         # (periodico + diarios) por lookup inverso y se muestra todo como YA CREADO,
         # en vez de re-derivar del texto del pedido (que podria dar otro codigo ante
@@ -825,10 +826,23 @@ class MotorTurnos:
                              'duplicado': rb.duplicado, 'notas': rb.notas}
         else:
             fam = self.familia_objetivo('diario', agrupador, es_flex)
-            prop = self.proponer_correlativo('diario', agrupador, fam, reservas)
-            codigo_diario = prop['propuesto']
-            out['diario'] = {'accion': 'crear', 'codigo_propuesto': codigo_diario,
-                             'familia': fam, 'detalle': prop}
+            # Dedup dentro del lote: si otro pedido ya propuso CREAR un diario para
+            # este mismo horario (agrupador + rango), se reusa ese codigo en vez de
+            # proponer uno nuevo. Dos turnos identicos comparten diario (el feriado
+            # FSI/FNO es aparte y lo configura la usuaria, no cambia el diario).
+            clave_d = (agrupador, p.hora_inicio, p.hora_fin)
+            cache_d = cache.get('diarios') if cache is not None else None
+            if cache_d is not None and clave_d in cache_d:
+                codigo_diario = cache_d[clave_d]
+                out['diario'] = {'accion': 'crear', 'codigo_propuesto': codigo_diario,
+                                 'familia': fam, 'detalle': None, 'compartido': True}
+            else:
+                prop = self.proponer_correlativo('diario', agrupador, fam, reservas)
+                codigo_diario = prop['propuesto']
+                out['diario'] = {'accion': 'crear', 'codigo_propuesto': codigo_diario,
+                                 'familia': fam, 'detalle': prop}
+                if cache_d is not None:
+                    cache_d[clave_d] = codigo_diario
             out['tolerancia'] = calcular_tolerancia(p.hora_inicio, p.hora_fin)
 
         grilla = self.construir_grilla(codigo_diario, p.dias_trabaja)
@@ -838,9 +852,19 @@ class MotorTurnos:
                                 'duplicado': rp.duplicado, 'notas': rp.notas}
         else:
             fam = self.familia_objetivo('periodico', agrupador, es_flex)
-            prop = self.proponer_correlativo('periodico', agrupador, fam, reservas)
-            out['periodico'] = {'accion': 'crear', 'codigo_propuesto': prop['propuesto'],
-                                'familia': fam, 'detalle': prop}
+            # Dedup dentro del lote: misma grilla (que ya incluye el diario reusado)
+            # => mismo periodico. Dos turnos identicos comparten periodico.
+            clave_p = (agrupador, grilla)
+            cache_p = cache.get('periodicos') if cache is not None else None
+            if cache_p is not None and clave_p in cache_p:
+                out['periodico'] = {'accion': 'crear', 'codigo_propuesto': cache_p[clave_p],
+                                    'familia': fam, 'detalle': None, 'compartido': True}
+            else:
+                prop = self.proponer_correlativo('periodico', agrupador, fam, reservas)
+                out['periodico'] = {'accion': 'crear', 'codigo_propuesto': prop['propuesto'],
+                                    'familia': fam, 'detalle': prop}
+                if cache_p is not None:
+                    cache_p[clave_p] = prop['propuesto']
 
         out['cuadrito'] = {
             'dias': _DIA_NOMBRE,
@@ -861,6 +885,10 @@ class MotorTurnos:
                  horas_diarias_decl (opt), horas_sem_decl (opt), es_flex (opt).
         Devuelve lista de resultados en el mismo formato que analizar_pedido."""
         reservas = {}
+        # Caché del lote para NO crear diarios/periódicos repetidos: dos pedidos
+        # idénticos (mismo horario/grilla) comparten diario y periódico. Se llena
+        # dentro de _analizar_impl. Clave diario=(agrup,inicio,fin); peri=(agrup,grilla).
+        cache = {'diarios': {}, 'periodicos': {}}
         resultados = []
         for p in pedidos:
             codigo = p.get('codigo')
@@ -876,6 +904,7 @@ class MotorTurnos:
                     p.get('horas_men_decl'),
                     p.get('es_flex', False) or False,
                     reservas,
+                    cache,
                 )
                 # Reservar el correlativo de turno que REALMENTE se va a crear, para
                 # que el siguiente pedido del lote se corra a partir de ese numero:
