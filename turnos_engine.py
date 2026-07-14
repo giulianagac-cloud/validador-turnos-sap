@@ -25,6 +25,14 @@ def _norm(s: str) -> str:
     return s
 
 
+# Tope de correlativo "razonable". Los códigos SAP de turno/periódico/diario
+# tienen a lo sumo 4 dígitos. Un número >= este tope casi seguro es un dato
+# sucio/pegado en el export (ej. "LBS59923"): NO se toma como "último de la
+# familia" para no romper el correlativo. Se lo IGNORA para proponer, pero se
+# lo REPORTA (la app observa y avisa; nunca corrige el dato por su cuenta).
+MAX_CORRELATIVO = 9999
+
+
 # Mapa de nombres de día -> índice 0=Lunes ... 6=Domingo
 _DIAS = {
     'lunes': 0, 'l': 0, 'lu': 0, 'lun': 0,
@@ -431,17 +439,34 @@ class MotorTurnos:
         Tolera variantes con sufijo de letra (ej. "LM861-A", "LM858-AP"): el
         numero de correlativo es el que cuenta, el sufijo es una variante
         dentro de ese mismo numero, no avanza la numeracion por si solo.
+
+        Los codigos con numero absurdo (>= MAX_CORRELATIVO, casi siempre un dato
+        pegado/mal exportado, ej. "LBS59923") NO entran a la familia: romperian
+        el correlativo ("siguiente del ultimo") tomando ese numero gigante como
+        ultimo. Se devuelven aparte en `sospechosos` para poder reportarlos.
+
+        Devuelve (familias, anchos, sospechosos):
+          familias    : {prefijo: set(int)}       — numeros validos por familia
+          anchos      : {prefijo: int}            — ancho de relleno (R187 -> 3)
+          sospechosos : {prefijo: [codigo, ...]}  — codigos ignorados por raros
         """
         sub = df[df['Agrup.para PHTD'] == agrupador]
         familias = {}
         anchos = {}
+        sospechosos = {}
         for c in sub[col_codigo].dropna().astype(str).unique():
-            mt = re.match(r'^([A-Za-z]+)(\d+)(?:-[A-Za-z]+)?$', c.strip())
+            c = c.strip()
+            mt = re.match(r'^([A-Za-z]+)(\d+)(?:-[A-Za-z]+)?$', c)
             if mt:
                 pref, num = mt.group(1), mt.group(2)
+                if int(num) >= MAX_CORRELATIVO:
+                    sospechosos.setdefault(pref, []).append(c)  # dato sucio: ignorar
+                    continue
                 familias.setdefault(pref, set()).add(int(num))
                 anchos.setdefault(pref, len(num))  # ancho de relleno (R187 -> 3)
-        return familias, anchos
+        for pref in sospechosos:
+            sospechosos[pref].sort()
+        return familias, anchos, sospechosos
 
     def proponer_correlativo(self, capa: str, agrupador: int, familia_prefijo: str, reservas=None):
         """capa: 'diario' | 'periodico' | 'turno'.
@@ -454,7 +479,7 @@ class MotorTurnos:
         else:
             df, col = self.turnos, 'Regla p.plan h.tbjo.'
 
-        familias, anchos = self._familias_de(df, col, agrupador)
+        familias, anchos, sospechosos = self._familias_de(df, col, agrupador)
         nums_tabla = familias.get(familia_prefijo)
         if not nums_tabla:
             return {'propuesto': None,
@@ -468,7 +493,12 @@ class MotorTurnos:
         propuesto = f'{familia_prefijo}{ultimo + 1:0{ancho}d}'
         huecos = [f'{familia_prefijo}{n:0{ancho}d}'
                   for n in range(nums_merged[0], ultimo + 1) if n not in set(nums_merged)]
+        raros = sospechosos.get(familia_prefijo, [])
+        nota_raros = (f' OJO: se ignoraron codigos con numero fuera de rango en la familia '
+                      f'"{familia_prefijo}" (posible dato mal cargado): {raros}. Revisar en la tabla.'
+                      if raros else '')
         return {
+            'sospechosos': raros,
             'propuesto': propuesto,
             'ultimo_existente': f'{familia_prefijo}{ultimo:0{ancho}d}',
             'total_familia': len(nums_tabla),
@@ -476,7 +506,8 @@ class MotorTurnos:
             'nota': (f'Propongo {propuesto} (siguiente de {familia_prefijo}{ultimo:0{ancho}d}). '
                      + (f'Hay {len(huecos)} huecos libres NO usados: {huecos[:10]}'
                         + ('...' if len(huecos) > 10 else '')
-                        if huecos else 'Familia sin huecos.')),
+                        if huecos else 'Familia sin huecos.')
+                     + nota_raros),
         }
 
 
@@ -490,13 +521,17 @@ class MotorTurnos:
         if not mt:
             return {'estado': 'revisar', 'nota': f'No se pudo interpretar el codigo "{codigo_pedido}"'}
         pref, num = mt.group(1), int(mt.group(2))
-        familias, anchos = self._familias_de(self.turnos, 'Regla p.plan h.tbjo.', agrupador)
+        familias, anchos, sospechosos = self._familias_de(self.turnos, 'Regla p.plan h.tbjo.', agrupador)
         nums_tabla = familias.get(pref)
         ancho = anchos.get(pref, len(mt.group(2)))
         if not nums_tabla:
             return {'estado': 'revisar',
                     'nota': f'La familia "{pref}" no existe en el agrupador {agrupador}. '
                             f'Familias presentes: {sorted(familias.keys())}'}
+        raros = sospechosos.get(pref, [])
+        nota_raros = (f' OJO: se ignoraron codigos con numero fuera de rango en la familia '
+                      f'"{pref}" (posible dato mal cargado): {raros}. Revisar en la tabla.'
+                      if raros else '')
         nums_reservados = (reservas or {}).get(('turno', agrupador, pref), set())
         nums_merged = sorted(set(nums_tabla) | nums_reservados)
         ultimo = nums_merged[-1]
@@ -516,9 +551,10 @@ class MotorTurnos:
             estado = 'retroactivo'
             nota = (f'El codigo {codigo_pedido} es menor al ultimo existente {pref}{ultimo:0{ancho}d} '
                     f'pero no existe (hueco). Revisar.')
-        return {'estado': estado, 'nota': nota,
+        return {'estado': estado, 'nota': nota + nota_raros,
                 'esperado': f'{pref}{esperado:0{ancho}d}',
-                'ultimo_existente': f'{pref}{ultimo:0{ancho}d}', 'familia': pref}
+                'ultimo_existente': f'{pref}{ultimo:0{ancho}d}', 'familia': pref,
+                'sospechosos': raros}
 
     # -----------------------------------------------------------------------
     # Lookup INVERSO: para un turno que YA EXISTE, leer de las tablas su cadena
@@ -646,7 +682,7 @@ class MotorTurnos:
             df, col = self.periodicos, 'PHT por períodos'
         else:
             df, col = self.turnos, 'Regla p.plan h.tbjo.'
-        familias, _ = self._familias_de(df, col, agrupador)
+        familias, _, _ = self._familias_de(df, col, agrupador)
         # Casos especiales: para estos agrupadores, en periódico no-flex, la serie de
         # 1 letra es la GENERICA (uso normal). Las otras series de 2 letras (RA, TA, ...)
         # no son variantes numeradas de esa serie: son series de otro tipo de periódico
