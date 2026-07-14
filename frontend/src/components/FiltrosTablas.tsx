@@ -159,10 +159,16 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
   const aplicarMenu = () => {
     if (!menu) return;
     const col = menu.col;
+    // Con búsqueda activa se aplica SOLO lo que quedó visible y tildado (como
+    // Excel: escribir en el buscador + Aceptar filtra por esos resultados).
+    // Sin búsqueda, se aplica la selección tal cual.
+    const seleccion = buscar.trim()
+      ? new Set(opcionesVisibles.filter(o => draft.has(o)))
+      : new Set(draft);
     setColFiltros(prev => {
       const next = { ...prev };
-      if (draft.size === opciones.length) delete next[col]; // todo seleccionado = sin filtro
-      else next[col] = new Set(draft);
+      if (seleccion.size === opciones.length) delete next[col]; // todo seleccionado = sin filtro
+      else next[col] = seleccion;
       return next;
     });
     setMenu(null);
@@ -350,8 +356,13 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
             }}
           >
             <input type="checkbox" checked={todasVisiblesTildadas} onChange={toggleTodasVisibles} />
-            (Seleccionar todo)
+            {buscar.trim() ? '(Seleccionar resultados)' : '(Seleccionar todo)'}
           </label>
+          {buscar.trim() && (
+            <div style={{ padding: '3px 8px', fontSize: 10, color: '#5A5A5A', background: '#FBF6E0', borderBottom: '1px solid #E0D9BE' }}>
+              Al Aceptar se filtra por los {opcionesVisibles.length} resultado(s) tildado(s).
+            </div>
+          )}
           <div style={{ maxHeight: 240, overflow: 'auto', background: '#fff', border: '1px solid #D6D2CB' }}>
             {opcionesVisibles.length === 0 && (
               <div style={{ padding: 8, color: '#888' }}>Sin coincidencias.</div>
