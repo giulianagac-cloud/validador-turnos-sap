@@ -115,6 +115,10 @@ export default function GrillaResultado({
   const turnoAviso = !resultado.ya_existe && resultado.turno
     && ['duplicado', 'salto', 'retroactivo', 'revisar'].includes(resultado.turno.estado)
     ? resultado.turno : null;
+  // 'duplicado' = el número pedido ya está ocupado por sus variantes (-A/-B).
+  // No es ambiguo: hay que usar el siguiente correlativo libre. Se muestra como
+  // propuesta directa ("Usá LBSxxx"), no como "revisá y decidí".
+  const turnoDuplicado = !!turnoAviso && turnoAviso.estado === 'duplicado' && !!turnoAviso.esperado;
   const periodicoBadge = badgeAccion(resultado.periodico.accion);
   const periodicoCodigo = resultado.periodico.accion === 'crear'
     ? resultado.periodico.codigo_propuesto
@@ -193,6 +197,7 @@ export default function GrillaResultado({
         style={{ background: resultado.parseError ? '#CC0000'
           : resultado.flex ? '#9E5000'
           : resultado.hay_revisar ? '#9E5000'
+          : turnoDuplicado ? '#0A246A'
           : turnoAviso ? '#9E5000'
           : resultado.ok ? '#1A5C1A' : '#0A246A' }}>
         {resultado.parseError
@@ -203,6 +208,8 @@ export default function GrillaResultado({
           ? `${tituloTurno} — FLEX: elegí el diario`
           : resultado.hay_revisar
           ? `⚠ ${tituloTurno} — hay celdas REVISAR MANUAL`
+          : turnoDuplicado
+          ? `${tituloTurno} — usá el correlativo ${turnoAviso?.esperado}`
           : turnoAviso
           ? `⚠ ${tituloTurno} — revisá el correlativo del turno`
           : `Resultado — ${tituloTurno}${rotativo ? ' (ROTATIVO)' : ''}`}
@@ -264,7 +271,16 @@ export default function GrillaResultado({
                 </tbody>
               </table>
             </div>
-            {turnoAviso && (
+            {turnoDuplicado ? (
+              <div style={{
+                marginTop: 8, padding: '7px 9px', fontSize: 12,
+                background: '#E8F0FF', border: '1px solid #0A246A', color: '#0A246A',
+              }}>
+                El código <b style={mono}>{tituloTurno}</b> ya está ocupado por sus variantes
+                (<span style={mono}>-A</span>/<span style={mono}>-B</span>).
+                Usá el siguiente correlativo libre: <b style={mono}>{turnoAviso?.esperado}</b>.
+              </div>
+            ) : turnoAviso && (
               <div style={{
                 marginTop: 8, padding: '7px 9px', fontSize: 12,
                 background: '#FFF3CD', border: '1px solid #E0B000', color: '#7A4E00',
@@ -273,10 +289,6 @@ export default function GrillaResultado({
                 {turnoAviso.esperado && (
                   <> El siguiente correlativo libre sería <b style={mono}>{turnoAviso.esperado}</b>.</>
                 )}
-                <div style={{ marginTop: 3, color: '#8A6000' }}>
-                  Puede ser que el número ya esté usado por variantes (p. ej. <span style={mono}>-A</span>/<span style={mono}>-B</span>).
-                  No es un turno "ya creado": decidí si reutilizás el existente o creás el correlativo propuesto.
-                </div>
               </div>
             )}
             {rotativo && (
