@@ -55,7 +55,7 @@ const BADGE = {
  *    el código exacto no existe) → es una COLISIÓN a revisar, NO un "ya creado".
  */
 function badgeTurno(estado?: string, yaExiste?: boolean): EstadoVisual {
-  if (estado === 'duplicado') return yaExiste ? BADGE.creado : BADGE.revisar;
+  if (estado === 'duplicado') return yaExiste ? BADGE.creado : BADGE.crear;
   if (estado === 'ok') return BADGE.crear;
   if (estado === 'salto' || estado === 'retroactivo' || estado === 'revisar') return BADGE.revisar;
   return BADGE.neutro;
@@ -209,7 +209,7 @@ export default function GrillaResultado({
           : resultado.hay_revisar
           ? `⚠ ${tituloTurno} — hay celdas REVISAR MANUAL`
           : turnoDuplicado
-          ? `${tituloTurno} — usá el correlativo ${turnoAviso?.esperado}`
+          ? `Turno a crear: ${turnoAviso?.esperado}`
           : turnoAviso
           ? `⚠ ${tituloTurno} — revisá el correlativo del turno`
           : `Resultado — ${tituloTurno}${rotativo ? ' (ROTATIVO)' : ''}`}
@@ -271,16 +271,7 @@ export default function GrillaResultado({
                 </tbody>
               </table>
             </div>
-            {turnoDuplicado ? (
-              <div style={{
-                marginTop: 8, padding: '7px 9px', fontSize: 12,
-                background: '#E8F0FF', border: '1px solid #0A246A', color: '#0A246A',
-              }}>
-                El código <b style={mono}>{tituloTurno}</b> ya está ocupado por sus variantes
-                (<span style={mono}>-A</span>/<span style={mono}>-B</span>).
-                Usá el siguiente correlativo libre: <b style={mono}>{turnoAviso?.esperado}</b>.
-              </div>
-            ) : turnoAviso && (
+            {turnoAviso && !turnoDuplicado && (
               <div style={{
                 marginTop: 8, padding: '7px 9px', fontSize: 12,
                 background: '#FFF3CD', border: '1px solid #E0B000', color: '#7A4E00',
