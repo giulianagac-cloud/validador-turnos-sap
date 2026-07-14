@@ -877,8 +877,20 @@ class MotorTurnos:
                     p.get('es_flex', False) or False,
                     reservas,
                 )
-                # Reservar turno siempre (para que el siguiente pedido cuente este numero)
-                self._registrar_reserva(reservas, 'turno', agrupador, codigo)
+                # Reservar el correlativo de turno que REALMENTE se va a crear, para
+                # que el siguiente pedido del lote se corra a partir de ese numero:
+                #  - 'ok'   -> el codigo pedido (es el correlativo correcto == esperado)
+                #  - 'duplicado'/'salto'/'retroactivo' -> el 'esperado' que propone el
+                #    motor (el codigo pedido ya esta ocupado; se usara el siguiente libre)
+                # Sin esto, dos pedidos que colisionan proponen el mismo numero (ej. dos
+                # veces LBS953 en vez de LBS953 y LBS954).
+                turno_res = r.get('turno') or {}
+                estado_turno = turno_res.get('estado')
+                esperado_turno = turno_res.get('esperado')
+                if estado_turno in ('duplicado', 'salto', 'retroactivo') and esperado_turno:
+                    self._registrar_reserva(reservas, 'turno', agrupador, esperado_turno)
+                else:
+                    self._registrar_reserva(reservas, 'turno', agrupador, codigo)
                 # Reservar diario/periodico solo si se van a crear
                 if r.get('diario', {}).get('accion') == 'crear':
                     self._registrar_reserva(reservas, 'diario', agrupador,
