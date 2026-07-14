@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import TablasLoader from './components/TablasLoader';
 import PedidoForm from './components/PedidoForm';
-import GeneradorGrilla from './components/GeneradorGrilla';
 import GrillaResultado from './components/GrillaResultado';
 import LoginScreen from './components/LoginScreen';
 import type { TablasState, AnyResultado, PedidoDisplay } from './types';
@@ -213,12 +212,6 @@ export default function App() {
             onError={(msg) => setStatus(`Error: ${msg}`, 'error')}
             onGoToTablas={() => setTab('tablas')}
           />
-          <div style={{ marginTop: 16 }}>
-            <GeneradorGrilla
-              tablasState={tablas}
-              onError={(msg) => setStatus(`Error: ${msg}`, 'error')}
-            />
-          </div>
         </div>
 
         <div style={{ display: tab === 'resultados' ? 'block' : 'none' }}>
