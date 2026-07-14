@@ -131,11 +131,11 @@ export default function GrillaResultado({
   // pegarla al crear el periódico en SAP.
   const [copiado, setCopiado] = useState(false);
   const copiarPeriodico = async () => {
-    const encabezado = ['#', ...resultado.dias].join('\t');
+    const encabezado = ['#', ...resultado.dias.map(d => d.slice(0, 3))].join('\t');
     const filas = resultado.semanas_codigos.map((sem, i) =>
       [String(i + 1), ...sem.map(c => (c === CODIGO_REVISAR ? 'REVISAR' : c))].join('\t'),
     );
-    const texto = [`Periódico: ${periodicoCodigo ?? '—'}`, encabezado, ...filas].join('\n');
+    const texto = [encabezado, ...filas].join('\n');
     try {
       await navigator.clipboard.writeText(texto);
     } catch {
