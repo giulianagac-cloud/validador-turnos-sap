@@ -47,6 +47,11 @@ if FRONTEND_DIST.is_dir():
     if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+    # El index.html NO se cachea (siempre se baja fresco, así toma el bundle
+    # nuevo sin hard-refresh). Los assets con hash sí se cachean fuerte.
+    _NO_CACHE = {"Cache-Control": "no-store, must-revalidate"}
+    _INMUTABLE = {"Cache-Control": "public, max-age=31536000, immutable"}
+
     @app.get("/{full_path:path}")
     def servir_spa(full_path: str):
         # Si llega un /api/... hasta acá es porque ningún router lo resolvió: 404 real.
@@ -55,9 +60,10 @@ if FRONTEND_DIST.is_dir():
         # Si pide un archivo estático concreto que existe, servirlo.
         archivo = FRONTEND_DIST / full_path
         if full_path and archivo.is_file():
-            return FileResponse(archivo)
+            headers = _NO_CACHE if full_path.endswith(".html") else _INMUTABLE
+            return FileResponse(archivo, headers=headers)
         # Cualquier otra ruta -> index.html (fallback de single-page app).
-        return FileResponse(FRONTEND_DIST / "index.html")
+        return FileResponse(FRONTEND_DIST / "index.html", headers=_NO_CACHE)
 else:
     @app.get("/")
     def root():
