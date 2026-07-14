@@ -57,6 +57,7 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
   const [draft, setDraft] = useState<Set<string>>(new Set()); // selección en edición
   const [buscar, setBuscar] = useState('');
   const popupRef = useRef<HTMLDivElement>(null);
+  const primerMatchRef = useRef<HTMLLabelElement>(null); // 1ra coincidencia (scroll)
 
   const loadedAt = tablasState?.loadedAt ?? 0;
 
@@ -130,16 +131,27 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
     setMenu({ col, x: rect.right, y: rect.bottom });
   };
 
-  const opcionesVisibles = useMemo(
-    () => {
-      const q = buscar.trim().toLowerCase();
-      if (!q) return opciones;
-      return opciones.filter(o => (o === '' ? VACIO : o).toLowerCase().includes(q));
-    },
-    [opciones, buscar],
-  );
+  // El buscador NO oculta valores: resalta las coincidencias y baja hasta la
+  // primera, dejando la lista completa para poder scrollear y ver los que
+  // siguen. (En Excel el buscador esconde; acá se prefirió no perder contexto.)
+  const etiqueta = (o: string) => (o === '' ? VACIO : o);
+  const esMatch = (o: string) => {
+    const q = buscar.trim().toLowerCase();
+    return q !== '' && etiqueta(o).toLowerCase().includes(q);
+  };
 
-  const todasVisiblesTildadas = opcionesVisibles.length > 0 && opcionesVisibles.every(o => draft.has(o));
+  const primerMatchIdx = useMemo(() => {
+    if (!buscar.trim()) return -1;
+    return opciones.findIndex(esMatch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opciones, buscar]);
+
+  // Al cambiar la búsqueda, scrollear hasta la primera coincidencia.
+  useEffect(() => {
+    if (primerMatchIdx >= 0) primerMatchRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [primerMatchIdx]);
+
+  const todasTildadas = opciones.length > 0 && opciones.every(o => draft.has(o));
 
   const toggleValor = (o: string) =>
     setDraft(prev => {
@@ -148,27 +160,23 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
       return n;
     });
 
-  const toggleTodasVisibles = () =>
-    setDraft(prev => {
-      const n = new Set(prev);
-      if (todasVisiblesTildadas) opcionesVisibles.forEach(o => n.delete(o));
-      else opcionesVisibles.forEach(o => n.add(o));
-      return n;
-    });
+  const toggleTodas = () =>
+    setDraft(todasTildadas ? new Set() : new Set(opciones));
+
+  // "Solo estos": tilda únicamente las coincidencias de la búsqueda (destilda
+  // el resto) para poder filtrar rápido sin destildar a mano uno por uno.
+  const soloEstos = () => {
+    if (!buscar.trim()) return;
+    setDraft(new Set(opciones.filter(esMatch)));
+  };
 
   const aplicarMenu = () => {
     if (!menu) return;
     const col = menu.col;
-    // Con búsqueda activa se aplica SOLO lo que quedó visible y tildado (como
-    // Excel: escribir en el buscador + Aceptar filtra por esos resultados).
-    // Sin búsqueda, se aplica la selección tal cual.
-    const seleccion = buscar.trim()
-      ? new Set(opcionesVisibles.filter(o => draft.has(o)))
-      : new Set(draft);
     setColFiltros(prev => {
       const next = { ...prev };
-      if (seleccion.size === opciones.length) delete next[col]; // todo seleccionado = sin filtro
-      else next[col] = seleccion;
+      if (draft.size === opciones.length) delete next[col]; // todo seleccionado = sin filtro
+      else next[col] = new Set(draft);
       return next;
     });
     setMenu(null);
@@ -338,15 +346,23 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
             fontSize: 12,
           }}
         >
-          <div style={{ padding: 6, borderBottom: '1px solid #C9C5BD' }}>
+          <div style={{ padding: 6, borderBottom: '1px solid #C9C5BD', display: 'flex', gap: 4 }}>
             <input
               className="sap-input"
-              style={{ width: '100%' }}
+              style={{ flex: 1, minWidth: 0 }}
               autoFocus
               value={buscar}
               onChange={e => setBuscar(e.target.value)}
-              placeholder="Buscar…"
+              placeholder="Buscar (resalta y baja)…"
             />
+            <button
+              className="sap-btn"
+              onClick={soloEstos}
+              disabled={!buscar.trim() || primerMatchIdx < 0}
+              title="Tildar solo las coincidencias (destilda el resto)"
+            >
+              Solo estos
+            </button>
           </div>
           <label
             style={{
@@ -355,33 +371,41 @@ export default function FiltrosTablas({ tablasState, onError }: Props) {
               fontWeight: 'bold', cursor: 'pointer',
             }}
           >
-            <input type="checkbox" checked={todasVisiblesTildadas} onChange={toggleTodasVisibles} />
-            {buscar.trim() ? '(Seleccionar resultados)' : '(Seleccionar todo)'}
+            <input type="checkbox" checked={todasTildadas} onChange={toggleTodas} />
+            (Seleccionar todo)
           </label>
           {buscar.trim() && (
             <div style={{ padding: '3px 8px', fontSize: 10, color: '#5A5A5A', background: '#FBF6E0', borderBottom: '1px solid #E0D9BE' }}>
-              Al Aceptar se filtra por los {opcionesVisibles.length} resultado(s) tildado(s).
+              {primerMatchIdx < 0
+                ? 'Sin coincidencias.'
+                : `${opciones.filter(esMatch).length} coincidencia(s) resaltada(s). "Solo estos" para filtrar por ellas.`}
             </div>
           )}
           <div style={{ maxHeight: 240, overflow: 'auto', background: '#fff', border: '1px solid #D6D2CB' }}>
-            {opcionesVisibles.length === 0 && (
-              <div style={{ padding: 8, color: '#888' }}>Sin coincidencias.</div>
+            {opciones.length === 0 && (
+              <div style={{ padding: 8, color: '#888' }}>Sin valores.</div>
             )}
-            {opcionesVisibles.map((o, i) => (
-              <label
-                key={i}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '3px 8px', cursor: 'pointer',
-                  color: o === '' ? '#888' : '#000',
-                }}
-              >
-                <input type="checkbox" checked={draft.has(o)} onChange={() => toggleValor(o)} />
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {o === '' ? VACIO : o}
-                </span>
-              </label>
-            ))}
+            {opciones.map((o, i) => {
+              const match = esMatch(o);
+              return (
+                <label
+                  key={i}
+                  ref={i === primerMatchIdx ? primerMatchRef : undefined}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '3px 8px', cursor: 'pointer',
+                    background: match ? '#FFF29A' : undefined,
+                    color: o === '' ? '#888' : '#000',
+                    fontWeight: match ? 'bold' : 'normal',
+                  }}
+                >
+                  <input type="checkbox" checked={draft.has(o)} onChange={() => toggleValor(o)} />
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {etiqueta(o)}
+                  </span>
+                </label>
+              );
+            })}
           </div>
           <div style={{ display: 'flex', gap: 4, padding: 6, borderTop: '1px solid #C9C5BD' }}>
             <button className="sap-btn sap-btn-primary" style={{ flex: 1 }} onClick={aplicarMenu}>
