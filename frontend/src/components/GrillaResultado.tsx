@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type {
   DiarioResuelto, FechaReferencia, PedidoDisplay,
   ResultadoGrilla, ResultadoRotativo,
@@ -125,6 +126,32 @@ export default function GrillaResultado({
     })
     .sort(([a], [b]) => a.localeCompare(b));
   const nAcrear = diariosDelTurno.filter(([, d]) => d.accion === 'crear').length;
+
+  // Copiar la grilla del periódico (código + días × semanas), tabulada para
+  // pegarla al crear el periódico en SAP.
+  const [copiado, setCopiado] = useState(false);
+  const copiarPeriodico = async () => {
+    const encabezado = ['#', ...resultado.dias].join('\t');
+    const filas = resultado.semanas_codigos.map((sem, i) =>
+      [String(i + 1), ...sem.map(c => (c === CODIGO_REVISAR ? 'REVISAR' : c))].join('\t'),
+    );
+    const texto = [`Periódico: ${periodicoCodigo ?? '—'}`, encabezado, ...filas].join('\n');
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch {
+      // Fallback para navegadores/contextos sin Clipboard API.
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* noop */ }
+      document.body.removeChild(ta);
+    }
+    setCopiado(true);
+    window.setTimeout(() => setCopiado(false), 1800);
+  };
 
   const cellStyle = (codigo: string): React.CSSProperties => {
     const base: React.CSSProperties = { ...mono, textAlign: 'center', padding: '4px 0' };
@@ -303,7 +330,15 @@ export default function GrillaResultado({
                 Código periódico
               </span>
               <span style={{ ...mono, fontSize: 14, fontWeight: 'bold' }}>{periodicoCodigo ?? '—'}</span>
-              <span style={{ marginLeft: 'auto' }}>
+              <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  className="sap-btn"
+                  onClick={copiarPeriodico}
+                  title="Copiar la grilla del periódico para pegarla al crearlo en SAP"
+                  style={{ minWidth: 'auto', padding: '1px 9px' }}
+                >
+                  {copiado ? '✓ Copiado' : '⧉ Copiar'}
+                </button>
                 <Badge v={periodicoBadge} extra={resultado.periodico.accion === 'crear' ? 'proponer' : undefined} />
               </span>
             </div>
