@@ -196,7 +196,7 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
     franco: r.franco.trim(),
     horas_diarias_decl: r.horas_diarias_decl,
     horas_sem_decl: r.horas_sem_decl,
-    feriados: r.feriados === 'SI' ? 'FERIADO SÍ' : r.feriados === 'NO' ? 'FERIADO NO' : '',
+    feriados: r.feriados === 'SI' ? 'SÍ' : r.feriados === 'NO' ? 'NO' : '',
   }));
 
   const executeAnalisis = async (pedidos: PedidoIn[]) => {
@@ -503,8 +503,8 @@ export default function PedidoForm({ tablasState, staleHours, onResultados, onEr
                           title="Feriado SÍ (FSI) / Feriado NO (FNO)"
                         >
                           <option value="">—</option>
-                          <option value="SI">Feriado SÍ</option>
-                          <option value="NO">Feriado NO</option>
+                          <option value="SI">SÍ</option>
+                          <option value="NO">NO</option>
                         </select>
                       </td>
                       <td style={{ textAlign: 'center' }}>
